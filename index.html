@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heimspiel Verwaltung</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- jsPDF-AutoTable -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+</head>
+<body class="bg-gray-100 p-6">
+
+  <!-- Button: Neues Heimspiel -->
+  <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4">Neues Heimspiel</button>
+
+  <!-- Container für gespeicherte Formulare -->
+  <div id="gamesContainer"></div>
+
+  <!-- Modal: Spiel -->
+  <div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-4xl">
+      <h2 class="text-xl font-bold mb-4">Spiel</h2>
+
+      <div class="flex space-x-4 mb-4">
+        <!-- Dropdown Team -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Team</label>
+          <select id="selectTeam" class="border rounded w-40">
+            <option value="">Bitte wählen</option>
+            <option value="TheDeers I">TheDeers I</option>
+            <option value="TheDeers II">TheDeers II</option>
+            <option value="TheDeers III">TheDeers III</option>
+            <option value="TheDeers IV">TheDeers IV</option>
+          </select>
+        </div>
+
+        <!-- Gegner -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Gegner</label>
+          <input type="text" id="inputOpponent" class="border rounded w-40" />
+        </div>
+
+        <!-- Datum -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Datum</label>
+          <input type="date" id="inputDate" class="border rounded w-40" />
+        </div>
+      </div>
+
+      <!-- Tabelle Gäste -->
+      <table class="w-full text-sm mb-4" id="tab_Gaeste">
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="p-2">Name</th>
+            <th class="p-2">Getränke</th>
+            <th class="p-2">Essen</th>
+            <th class="p-2">Gesamtbetrag</th>
+            <th class="p-2">Abrechnung</th>
+			<th class="p-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Zeilen werden dynamisch hinzugefügt -->
+        </tbody>
+      </table>
+      <button id="addGuestRow" class="text-blue-600 mb-4">+ Gast hinzufügen</button>
+
+      <!-- Spiel abrechnen, Speichern & Schließen -->
+		<div class="flex justify-end space-x-2">
+		  <button id="btnFinalizeGame" class="bg-gray-400 cursor-not-allowed text-white px-4 py-2 rounded" disabled>Spiel abrechnen</button>
+		  <button id="btnSaveGame" class="bg-green-600 text-white px-4 py-2 rounded">Speichern</button>
+		  <button id="btnCloseGame" class="bg-gray-500 text-white px-4 py-2 rounded">Schließen</button>
+		</div>
+
+    </div>
+  </div>
+
+  <!-- Modal: Getränke -->
+  <div id="modalGetraenke" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-lg">
+      <h2 class="text-xl font-bold mb-4">Getränke</h2>
+      <table class="w-full text-sm mb-4" id="tab_Getraenke">
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="p-2">Name</th>
+            <th class="p-2">Preis</th>
+            <th class="p-2">Anzahl</th>
+            <th class="p-2">Zwischensumme</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Dynamisch befüllt -->
+        </tbody>
+      </table>
+      <div class="mb-4">Summe Getränke: <span id="summe_Getraenke">0.00</span> €</div>
+      <div class="flex justify-end space-x-2">
+        <button id="btnSaveGetraenke" class="bg-green-600 text-white px-4 py-2 rounded">Speichern</button>
+        <button id="btnCloseGetraenke" class="bg-gray-500 text-white px-4 py-2 rounded">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Essen -->
+  <div id="modalEssen" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-[9999]">
+    <div class="bg-white p-4 rounded w-1/2">
+      <h2 class="text-xl font-bold mb-4">Essen auswählen</h2>
+      <table class="min-w-full border mb-4">
+        <thead>
+          <tr>
+            <th class="border p-2">Name</th>
+            <th class="border p-2">Preis (€)</th>
+            <th class="border p-2">Anzahl</th>
+            <th class="border p-2">Zwischensumme (€)</th>
+          </tr>
+        </thead>
+        <tbody id="tab_Essen">
+          <!-- Dynamisch per JS befüllt -->
+        </tbody>
+      </table>
+      <div class="mb-4">
+        <strong>Gesamtsumme Essen:</strong> <span id="summe_Essen">0.00</span> €
+      </div>
+      <button id="btnSaveEssen" class="bg-green-500 text-white px-4 py-2 rounded">Speichern</button>
+      <button id="btnCloseEssen" class="bg-gray-500 text-white px-4 py-2 rounded ml-2">Schließen</button>
+    </div>
+  </div>
+
+  <!-- Modal: Abrechnung -->
+  <div id="modalAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-lg">
+      <h2 class="text-xl font-bold mb-4">Abrechnung</h2>
+      <div id="abrechnungContent"></div>
+      <div class="my-4">
+        <label class="block text-sm font-medium mb-1">Trinkgeld (€)</label>
+        <input type="number" id="inputTip" class="border rounded w-full" step="0.01" />
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button id="btnPaid" class="bg-green-600 text-white px-4 py-2 rounded">Bezahlt</button>
+        <button id="btnCloseAbrechnung" class="bg-gray-500 text-white px-4 py-2 rounded">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+
+let gespeicherteSpiele = [];
+let editIndex = null;
+let aktuelleAbrechnungRow = null;
+
+document.getElementById('btnNewGame').addEventListener('click', () => {
+  document.getElementById('modalGame').classList.remove('hidden');
+  updateFinalizeButtonState();
+  document.getElementById('inputDate').value = new Date().toISOString().split('T')[0];
+  initializeGaesteTable();
+});
+
+document.getElementById('btnCloseGame').addEventListener('click', () => {
+  document.getElementById('modalGame').classList.add('hidden');
+});
+
+function initializeGaesteTable() {
+  const tbody = document.querySelector('#tab_Gaeste tbody');
+  tbody.innerHTML = '';
+  for (let i = 0; i < 4; i++) addGuestRow();
+}
+
+function addGuestRow() {
+  const tbody = document.querySelector('#tab_Gaeste tbody');
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td class="border p-2">
+      <input type="text" class="border rounded w-full" placeholder="Name" />
+    </td>
+    <td class="border p-2">
+      <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddGetraenke">+ Hinzufügen</button>
+    </td>
+    <td class="border p-2">
+      <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddEssen">+ Hinzufügen</button>
+    </td>
+    <td class="summeGesamt">0.00 €</td>
+    <td class="border p-2">
+      <button class="bg-gray-500 text-white px-2 py-1 rounded btnAbrechnen">Abrechnen</button>
+    </td>
+	<td class="border p-2 text-center">
+        <button class="bg-red-600 text-white px-2 py-1 rounded btnDeleteGuest">X</button>
+      </td>
+  `;
+  tbody.appendChild(row);
+
+  // Event-Listener für Buttons in der neuen Zeile
+  row.querySelector('.btnAddGetraenke').addEventListener('click', () => openGetraenkeModal(row));
+  row.querySelector('.btnAddEssen').addEventListener('click', () => openEssenModal(row));
+  row.querySelector('.btnAbrechnen').addEventListener('click', () => openAbrechnungModal(row));
+row.querySelector('.btnDeleteGuest').addEventListener('click', () => {
+        row.remove();
+    });
+  }
+  
+
+// Getränke und Essen Daten (Beispiel)
+const getraenkeListe = [
+  { name: 'Cola', preis: 2.50 },
+  { name: 'Bier', preis: 3.00 },
+  { name: 'Wasser', preis: 1.50 }
+];
+
+const essenListe = [
+  { name: 'Wurst', preis: 3.50 },
+  { name: 'Steak', preis: 8.00 },
+  { name: 'Pommes', preis: 2.00 }
+];
+
+// Hilfsfunktion zum Runden auf 2 Nachkommastellen
+function round2(num) {
+  return Math.round(num * 100) / 100;
+}
+
+let aktuelleGetraenkeRow = null;
+let aktuelleEssenRow = null;
+
+// Getränke Modal öffnen
+function openGetraenkeModal(row) {
+  aktuelleGetraenkeRow = row;
+  const tbody = document.querySelector('#tab_Getraenke tbody');
+  tbody.innerHTML = '';
+
+  // Lade bereits vorhandene Getränke aus Daten-Attribut
+  let gespeicherteGetraenke = row.getAttribute('data-getraenke');
+  let getraenkeData = gespeicherteGetraenke ? JSON.parse(gespeicherteGetraenke) : {};
+
+  getraenkeListe.forEach((getraenk) => {
+    const menge = getraenkeData[getraenk.name] || 0;
+    const zwischensumme = round2(getraenk.preis * menge).toFixed(2);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="p-2 border">${getraenk.name}</td>
+      <td class="p-2 border">${getraenk.preis.toFixed(2)} €</td>
+      <td class="p-2 border">
+        <input type="number" min="0" value="${menge}" class="inputAnzahl border rounded w-16" data-preis="${getraenk.preis}" />
+      </td>
+      <td class="p-2 border zwischensumme">${zwischensumme} €</td>
+    `;
+    tbody.appendChild(tr);
+
+    // Event für Eingabe Änderung
+    tr.querySelector('.inputAnzahl').addEventListener('input', (e) => {
+      const wert = parseInt(e.target.value) || 0;
+      const preis = parseFloat(e.target.getAttribute('data-preis'));
+      const sum = round2(preis * wert).toFixed(2);
+      tr.querySelector('.zwischensumme').textContent = sum + ' €';
+      updateGetraenkeSumme();
+    });
+  });
+
+  updateGetraenkeSumme();
+  document.getElementById('modalGetraenke').classList.remove('hidden');
+}
+
+function updateGetraenkeSumme() {
+  const tbody = document.querySelector('#tab_Getraenke tbody');
+  let sum = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const text = tr.querySelector('.zwischensumme').textContent.replace(' €', '');
+    sum += parseFloat(text) || 0;
+  });
+  document.getElementById('summe_Getraenke').textContent = sum.toFixed(2);
+}
+
+document.getElementById('btnSaveGetraenke').addEventListener('click', () => {
+  if (!aktuelleGetraenkeRow) return;
+
+  const tbody = document.querySelector('#tab_Getraenke tbody');
+  const getraenkeData = {};
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const name = tr.children[0].textContent;
+    const menge = parseInt(tr.querySelector('.inputAnzahl').value) || 0;
+    if (menge > 0) {
+      getraenkeData[name] = menge;
+    }
+  });
+
+  aktuelleGetraenkeRow.setAttribute('data-getraenke', JSON.stringify(getraenkeData));
+  updateGesamtbetrag(aktuelleGetraenkeRow);
+
+  document.getElementById('modalGetraenke').classList.add('hidden');
+  aktuelleGetraenkeRow = null;
+});
+
+// Essen Modal öffnen
+function openEssenModal(row) {
+  aktuelleEssenRow = row;
+  const tbody = document.getElementById('tab_Essen');
+  tbody.innerHTML = '';
+
+  // Lade gespeicherte Essen-Daten
+  let gespeicherteEssen = row.getAttribute('data-essen');
+  let essenData = gespeicherteEssen ? JSON.parse(gespeicherteEssen) : {};
+
+  essenListe.forEach(item => {
+    const menge = essenData[item.name] || 0;
+    const zwischensumme = round2(item.preis * menge).toFixed(2);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="border px-2 py-1">${item.name}</td>
+      <td class="border px-2 py-1 text-right">${item.preis.toFixed(2)}</td>
+      <td class="border px-2 py-1 text-center">
+        <input type="number" min="0" value="${menge}" class="inputEssenAnzahl border rounded w-16" data-preis="${item.preis}" />
+      </td>
+      <td class="border px-2 py-1 text-right zwischensumme">${zwischensumme}</td>
+    `;
+    tbody.appendChild(tr);
+
+    tr.querySelector('.inputEssenAnzahl').addEventListener('input', (e) => {
+      const wert = parseInt(e.target.value) || 0;
+      const preis = parseFloat(e.target.getAttribute('data-preis'));
+      const sum = round2(preis * wert).toFixed(2);
+      tr.querySelector('.zwischensumme').textContent = sum;
+      updateEssenSumme();
+    });
+  });
+
+  updateEssenSumme();
+  document.getElementById('modalEssen').classList.remove('hidden');
+}
+
+function updateEssenSumme() {
+  const tbody = document.getElementById('tab_Essen');
+  let sum = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const text = tr.querySelector('.zwischensumme').textContent;
+    sum += parseFloat(text) || 0;
+  });
+  document.getElementById('summe_Essen').textContent = sum.toFixed(2);
+}
+
+document.getElementById('btnSaveEssen').addEventListener('click', () => {
+  if (!aktuelleEssenRow) return;
+
+  const tbody = document.getElementById('tab_Essen');
+  const essenData = {};
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const name = tr.children[0].textContent;
+    const menge = parseInt(tr.querySelector('.inputEssenAnzahl').value) || 0;
+    if (menge > 0) {
+      essenData[name] = menge;
+    }
+  });
+
+  aktuelleEssenRow.setAttribute('data-essen', JSON.stringify(essenData));
+  updateGesamtbetrag(aktuelleEssenRow);
+
+  document.getElementById('modalEssen').classList.add('hidden');
+  aktuelleEssenRow = null;
+});
+
+// Berechnung und Aktualisierung des Gesamtbetrags je Gast
+function updateGesamtbetrag(row) {
+  let sumGetraenke = 0;
+  let sumEssen = 0;
+
+  // Getränke summieren
+  let gespeicherteGetraenke = row.getAttribute('data-getraenke');
+  if (gespeicherteGetraenke) {
+    const getraenkeData = JSON.parse(gespeicherteGetraenke);
+    for (const name in getraenkeData) {
+      const menge = getraenkeData[name];
+      const getraenk = getraenkeListe.find(g => g.name === name);
+      if (getraenk) {
+        sumGetraenke += getraenk.preis * menge;
+      }
+    }
+  }
+
+  // Essen summieren
+  let gespeicherteEssen = row.getAttribute('data-essen');
+  if (gespeicherteEssen) {
+    const essenData = JSON.parse(gespeicherteEssen);
+    for (const name in essenData) {
+      const menge = essenData[name];
+      const essen = essenListe.find(e => e.name === name);
+      if (essen) {
+        sumEssen += essen.preis * menge;
+      }
+    }
+  }
+
+  const summeGesamt = round2(sumGetraenke + sumEssen);
+  row.querySelector('.summeGesamt').textContent = summeGesamt.toFixed(2) + ' €';
+}
+
+// Abrechnung Modal öffnen
+function openAbrechnungModal(row) {
+aktuelleAbrechnungRow = row;
+
+  const abrechnung = document.getElementById('abrechnungContent');
+  const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
+  const summeText = row.querySelector('.summeGesamt').textContent || '0.00 €';
+
+  // Getränke laden
+  let getraenkeHtml = '<h3 class="font-semibold mt-2">Getränke:</h3>';
+  let gespeicherteGetraenke = row.getAttribute('data-getraenke');
+  if (gespeicherteGetraenke) {
+    const getraenkeData = JSON.parse(gespeicherteGetraenke);
+    if (Object.keys(getraenkeData).length === 0) {
+      getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
+    } else {
+      getraenkeHtml += '<ul class="list-disc ml-5">';
+      for (const nameGetr in getraenkeData) {
+        const menge = getraenkeData[nameGetr];
+        const getraenk = getraenkeListe.find(g => g.name === nameGetr);
+        const preis = getraenk ? getraenk.preis : 0;
+        getraenkeHtml += `<li>${nameGetr}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
+      }
+      getraenkeHtml += '</ul>';
+    }
+  } else {
+    getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
+  }
+
+  // Essen laden
+  let essenHtml = '<h3 class="font-semibold mt-2">Essen:</h3>';
+  let gespeicherteEssen = row.getAttribute('data-essen');
+  if (gespeicherteEssen) {
+    const essenData = JSON.parse(gespeicherteEssen);
+    if (Object.keys(essenData).length === 0) {
+      essenHtml += '<p>Kein Essen gewählt.</p>';
+    } else {
+      essenHtml += '<ul class="list-disc ml-5">';
+      for (const nameEssen in essenData) {
+        const menge = essenData[nameEssen];
+        const essen = essenListe.find(e => e.name === nameEssen);
+        const preis = essen ? essen.preis : 0;
+        essenHtml += `<li>${nameEssen}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
+      }
+      essenHtml += '</ul>';
+    }
+  } else {
+    essenHtml += '<p>Kein Essen gewählt.</p>';
+  }
+
+  abrechnung.innerHTML = `
+    <p><strong>Gast:</strong> ${name}</p>
+    <p><strong>Betrag:</strong> ${summeText}</p>
+    ${getraenkeHtml}
+    ${essenHtml}
+  `;
+
+  document.getElementById('inputTip').value = '';
+  document.getElementById('modalAbrechnung').classList.remove('hidden');
+}
+
+document.getElementById('btnPaid').addEventListener('click', () => {
+  if (!aktuelleAbrechnungRow) return;
+  
+  // 1. Markiere als abgerechnet
+  aktuelleAbrechnungRow.classList.add('bg-green-100');
+  aktuelleAbrechnungRow.setAttribute('data-paid', 'true');
+
+  // 2. Name-Feld deaktivieren
+  const nameInput = aktuelleAbrechnungRow.querySelector('input[type="text"]');
+  if (nameInput) {
+    nameInput.setAttribute('disabled', 'true');
+    nameInput.classList.add('bg-gray-200'); // optional: ausgegraut darstellen
+  }
+
+  // 3. Getränke Button deaktivieren
+  const btnGetraenke = aktuelleAbrechnungRow.querySelector('.btnAddGetraenke');
+  if (btnGetraenke) {
+    btnGetraenke.setAttribute('disabled', 'true');
+    btnGetraenke.classList.remove('bg-blue-500');
+    btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
+  }
+
+  // 4. Essen Button deaktivieren
+  const btnEssen = aktuelleAbrechnungRow.querySelector('.btnAddEssen');
+  if (btnEssen) {
+    btnEssen.setAttribute('disabled', 'true');
+    btnEssen.classList.remove('bg-blue-500');
+    btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
+  }
+
+  // 5. Abrechnen Button deaktivieren
+  const btnAbrechnen = aktuelleAbrechnungRow.querySelector('.btnAbrechnen');
+  if (btnAbrechnen) {
+    btnAbrechnen.setAttribute('disabled', 'true');
+    btnAbrechnen.classList.remove('bg-gray-500');
+    btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
+  }
+
+  // 6. Löschbutton entfernen
+  const deleteCell = aktuelleAbrechnungRow.querySelector('.btnDeleteGuest');
+  if (deleteCell) {
+    deleteCell.remove();
+  }
+  
+    // 7. Hier setzen wir den grünen Haken in der letzten Zelle
+  const iconHtml = '<span class="text-green-600 text-xl">&#10004;</span>'; // Unicode Haken ✔
+  
+  // Angenommen, die letzte Spalte ist die 6. td (index 5)
+  const lastTd = aktuelleAbrechnungRow.querySelectorAll('td')[5];
+  lastTd.innerHTML = iconHtml;
+
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+  updateFinalizeButtonState();
+
+  // Modal schließen
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+});
+
+
+
+document.getElementById('btnCloseAbrechnung').addEventListener('click', () => {
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+});
+
+document.getElementById('btnPaid').addEventListener('click', () => {
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+});
+
+document.getElementById('addGuestRow').addEventListener('click', addGuestRow);
+
+// Speichern des gesamten Spiels
+document.getElementById('btnSaveGame').addEventListener('click', () => {
+  const team = document.getElementById('selectTeam').value;
+  const opponent = document.getElementById('inputOpponent').value;
+  const date = document.getElementById('inputDate').value;
+
+  const gaeste = [];
+  document.querySelectorAll('#tab_Gaeste tbody tr').forEach(row => {
+	gaeste.push({
+	  name: row.querySelector('input[type="text"]').value,
+	  getraenke: row.getAttribute('data-getraenke'),
+	  essen: row.getAttribute('data-essen'),
+	  paid: row.getAttribute('data-paid') === 'true'
+	});
+
+  });
+
+  const spielData = { team, opponent, date, gaeste };
+
+  if (editIndex !== null) {
+    // Update bestehendes Spiel
+    gespeicherteSpiele[editIndex] = spielData;
+    editIndex = null;
+  } else {
+    // Neues Spiel speichern
+    gespeicherteSpiele.push(spielData);
+  }
+
+  renderGames();
+  document.getElementById('modalGame').classList.add('hidden');
+});
+
+
+// Abrechnung Modal öffnen
+function openAbrechnungModal(row) {
+  aktuelleAbrechnungRow = row;
+  const abrechnung = document.getElementById('abrechnungContent');
+  const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
+  const summeText = row.querySelector('.summeGesamt').textContent || '0.00 €';
+
+  // Getränke laden
+  let getraenkeHtml = '<h3 class="font-semibold mt-2">Getränke:</h3>';
+  let gespeicherteGetraenke = row.getAttribute('data-getraenke');
+  if (gespeicherteGetraenke) {
+    const getraenkeData = JSON.parse(gespeicherteGetraenke);
+    if (Object.keys(getraenkeData).length === 0) {
+      getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
+    } else {
+      getraenkeHtml += '<ul class="list-disc ml-5">';
+      for (const nameGetr in getraenkeData) {
+        const menge = getraenkeData[nameGetr];
+        const getraenk = getraenkeListe.find(g => g.name === nameGetr);
+        const preis = getraenk ? getraenk.preis : 0;
+        getraenkeHtml += `<li>${nameGetr}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
+      }
+      getraenkeHtml += '</ul>';
+    }
+  } else {
+    getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
+  }
+
+  // Essen laden
+  let essenHtml = '<h3 class="font-semibold mt-2">Essen:</h3>';
+  let gespeicherteEssen = row.getAttribute('data-essen');
+  if (gespeicherteEssen) {
+    const essenData = JSON.parse(gespeicherteEssen);
+    if (Object.keys(essenData).length === 0) {
+      essenHtml += '<p>Kein Essen gewählt.</p>';
+    } else {
+      essenHtml += '<ul class="list-disc ml-5">';
+      for (const nameEssen in essenData) {
+        const menge = essenData[nameEssen];
+        const essen = essenListe.find(e => e.name === nameEssen);
+        const preis = essen ? essen.preis : 0;
+        essenHtml += `<li>${nameEssen}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
+      }
+      essenHtml += '</ul>';
+    }
+  } else {
+    essenHtml += '<p>Kein Essen gewählt.</p>';
+  }
+
+  abrechnung.innerHTML = `
+    <p><strong>Name:</strong> ${name}</p>
+    <p><strong>Gesamtbetrag:</strong> ${summeText}</p>
+    ${getraenkeHtml}
+    ${essenHtml}
+  `;
+
+  document.getElementById('inputTip').value = '';
+  document.getElementById('modalAbrechnung').classList.remove('hidden');
+}
+
+// Event-Listener für „Bezahlt“-Button
+document.getElementById('btnPaid').addEventListener('click', () => {
+  if (!aktuelleAbrechnungRow) return;
+
+  // Markiere Zeile als abgerechnet (z.B. Hintergrundfarbe grün)
+  aktuelleAbrechnungRow.classList.add('bg-green-100');
+
+  // Optional: Ersetze den „Abrechnen“-Button durch „Abgerechnet“
+  const abrechnenCell = aktuelleAbrechnungRow.querySelector('td:last-child');
+  abrechnenCell.innerHTML = '<span class="text-green-600 font-semibold">Abgerechnet</span>';
+
+  // Schließe Modal
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+});
+
+// Schließen-Button im Abrechnen-Modal
+document.getElementById('btnCloseAbrechnung').addEventListener('click', () => {
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+});
+
+// Schließen-Button im Abrechnen-Modal
+document.getElementById('btnCloseGetraenke').addEventListener('click', () => {
+  document.getElementById('modalGetraenke').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+});
+
+// Schließen-Button im Abrechnen-Modal
+document.getElementById('btnCloseEssen').addEventListener('click', () => {
+  document.getElementById('modalEssen').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+});
+
+function formatDate(dateString) {
+  const [year, month, day] = dateString.split("-");
+  return `${day}.${month}.${year}`;
+}
+
+
+function updateFinalizeButtonState() {
+  const rows = document.querySelectorAll('#tab_Gaeste tbody tr');
+  if (rows.length === 0) return;
+
+  const allPaid = Array.from(rows).every(row => row.getAttribute('data-paid') === 'true');
+
+  const btn = document.getElementById('btnFinalizeGame');
+  if (!btn) return;
+
+  if (allPaid) {
+    btn.disabled = false;
+    btn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+    btn.classList.add('bg-blue-600');
+  } else {
+    btn.disabled = true;
+    btn.classList.add('bg-gray-400', 'cursor-not-allowed');
+    btn.classList.remove('bg-blue-600');
+  }
+}
+
+document.getElementById('btnFinalizeGame').addEventListener('click', async () => {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  const team = document.getElementById('selectTeam').value;
+  const opponent = document.getElementById('inputOpponent').value;
+  const date = document.getElementById('inputDate').value;
+
+  const tableData = [];
+  const drinksSummary = {};
+  const foodSummary = {};
+
+  document.querySelectorAll('#tab_Gaeste tbody tr').forEach(row => {
+    const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
+    const getraenke = JSON.parse(row.getAttribute('data-getraenke') || '{}');
+    const essen = JSON.parse(row.getAttribute('data-essen') || '{}');
+    const betrag = row.querySelector('.summeGesamt').textContent.replace(' €', '');
+    const tip = row.getAttribute('data-tip') || '0.00';
+
+    // Getränke Text + Summen berechnen
+    let getraenkeText = '';
+    for (let [k, v] of Object.entries(getraenke)) {
+      if (v > 0) {
+        getraenkeText += `${k} (${v}) `;
+        drinksSummary[k] = (drinksSummary[k] || 0) + v;
+      }
+    }
+
+    // Essen Text + Summen berechnen
+    let essenText = '';
+    for (let [k, v] of Object.entries(essen)) {
+      if (v > 0) {
+        essenText += `${k} (${v}) `;
+        foodSummary[k] = (foodSummary[k] || 0) + v;
+      }
+    }
+
+    tableData.push([name, getraenkeText.trim(), essenText.trim(), betrag + ' €', tip + ' €']);
+  });
+
+  // Summenzeile
+  const getraenkeSumme = Object.entries(drinksSummary).map(([k, v]) => `${k} (${v})`).join(' ');
+  const essenSumme = Object.entries(foodSummary).map(([k, v]) => `${k} (${v})`).join(' ');
+
+  tableData.push(['SUMME', getraenkeSumme, essenSumme, '', '']);
+
+  // PDF erstellen
+  doc.text(`Abrechnung: ${team} vs ${opponent} am ${date}`, 10, 10);
+  doc.autoTable({
+    head: [['Name', 'Getränke', 'Essen', 'Zwischensumme', 'Trinkgeld']],
+    body: tableData,
+    styles: { fontSize: 10 },
+    headStyles: { fillColor: [100, 100, 100] },
+    startY: 20,
+    foot: [['', '', '', '', '']],
+    didDrawCell: (data) => {
+      if (data.row.index === tableData.length - 1) {
+        doc.setFont(undefined, 'bold');
+      }
+    }
+  });
+	// PDF als Blob exportieren
+	const pdfBlob = doc.output('blob');
+	
+	// NextCloud Zugangsdaten
+	const nextcloudURL = "https://thedeers.ddns.net/nextcloud/index.php/apps/files/files/52396?dir=/Finanzen/Abrechnungen%20Spieltage";
+	const username = "MarcelMessbacher";
+	const password = "marcel@thedeers";
+	
+	// API Aufruf, um die Datei hochzuladen
+	const filename = `${date}_${team}_${opponent}.pdf`.replace(/\s+/g, '_');
+	const proxyUrl = "https://cors-anywhere.herokuapp.com/";
+	const uploadUrl = proxyUrl + nextcloudURL + filename;
+	
+	try {
+		const response = await fetch(uploadUrl, {
+		method: 'PUT',
+		headers: {
+			'Authorization': 'Basic' + btoa(username + ":" + password)
+			},
+		body: pdfBlob
+		});
+		
+		if (response.ok) {
+			alert("PDF erfolgreich hochgeladen!");
+		} else {
+			alert("Fehler beim Hochladen der PDF: " + response.status);
+		}
+		} catch (error) {
+			console.error("Fehler:", error);
+			alert("Es gab ein Problem beim Hochladen der Datei.");
+		}
+});
+
+
+
+function renderGames() {
+  const container = document.getElementById('gamesContainer');
+  container.innerHTML = '';
+
+  gespeicherteSpiele.forEach((spiel, index) => {
+    const div = document.createElement('div');
+    div.className = 'bg-white shadow p-4 mb-2 flex justify-between items-center rounded';
+
+    div.innerHTML = `
+      <div>
+        <strong>${spiel.team}</strong> vs ${spiel.opponent} <br>
+		<span class="text-sm text-gray-500">${formatDate(spiel.date)}</span>
+
+      </div>
+      ${spiel.abgerechnet ? `<a href="${spiel.pdfPfad}" target="_blank" title="PDF anzeigen">📄</a>` :
+	`<button class="text-blue-600" onclick="editGame(${index})">✏️</button>`}
+
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+function editGame(index) {
+  const spiel = gespeicherteSpiele[index];
+  editIndex = index;
+
+  document.getElementById('selectTeam').value = spiel.team;
+  document.getElementById('inputOpponent').value = spiel.opponent;
+  document.getElementById('inputDate').value = spiel.date;
+
+  // Gäste laden
+  const tbody = document.querySelector('#tab_Gaeste tbody');
+  tbody.innerHTML = '';
+  spiel.gaeste.forEach(gast => {
+    addGuestRow();
+    const lastRow = tbody.lastChild;
+    lastRow.querySelector('input[type="text"]').value = gast.name;
+    if (gast.getraenke) lastRow.setAttribute('data-getraenke', gast.getraenke);
+    if (gast.essen) lastRow.setAttribute('data-essen', gast.essen);
+    updateGesamtbetrag(lastRow);
+	if (gast.paid) {
+  lastRow.classList.add('bg-green-100');
+  lastRow.setAttribute('data-paid', 'true'); // ✅ WICHTIG
+
+  const nameInput = lastRow.querySelector('input[type="text"]');
+  if (nameInput) {
+    nameInput.setAttribute('disabled', 'true');
+    nameInput.classList.add('bg-gray-200');
+  }
+
+  const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
+  if (btnGetraenke) {
+    btnGetraenke.setAttribute('disabled', 'true');
+    btnGetraenke.classList.remove('bg-blue-500');
+    btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
+  }
+
+  const btnEssen = lastRow.querySelector('.btnAddEssen');
+  if (btnEssen) {
+    btnEssen.setAttribute('disabled', 'true');
+    btnEssen.classList.remove('bg-blue-500');
+    btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
+  }
+
+  const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
+  if (btnAbrechnen) {
+    btnAbrechnen.setAttribute('disabled', 'true');
+    btnAbrechnen.classList.remove('bg-gray-500');
+    btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
+  }
+
+  const deleteCell = lastRow.querySelector('.btnDeleteGuest');
+  if (deleteCell) {
+    deleteCell.remove();
+  }
+
+  const lastTd = lastRow.querySelectorAll('td')[5];
+  if (lastTd) {
+    lastTd.innerHTML = '<span class="text-green-600 text-xl">&#10004;</span>';
+  }
+}
+
+
+  });
+
+  document.getElementById('modalGame').classList.remove('hidden');
+  updateFinalizeButtonState();
+}
+
+
+</script>
+</body>
+</html>
