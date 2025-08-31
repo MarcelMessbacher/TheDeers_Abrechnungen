@@ -277,6 +277,7 @@ async function loadGamesFromFirebase() {
     querySnapshot.forEach((doc) => {
       gespeicherteSpiele.push({
         id: doc.id,
+        firebaseId: doc.id,
         ...doc.data()
       });
     });
@@ -988,106 +989,6 @@ function editGame(index) {
       lastRow.querySelector('input[type="text"]').value = gast.name || '';
       if (gast.getraenke) lastRow.setAttribute('data-getraenke', gast.getraenke);
       if (gast.essen) lastRow.setAttribute('data-essen', gast.essen);
-      if (gast.tip) lastRow.setAttribute('data-tip', gast.tip);
-      
-      updateGesamtbetrag(lastRow);
-      
-      if (gast.paid) {
-        lastRow.classList.add('bg-green-100');
-        lastRow.setAttribute('data-paid', 'true');
-
-        const nameInput = lastRow.querySelector('input[type="text"]');
-        if (nameInput) {
-          nameInput.setAttribute('disabled', 'true');
-          nameInput.classList.add('bg-gray-200');
-        }
-
-        const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
-        if (btnGetraenke) {
-          btnGetraenke.setAttribute('disabled', 'true');
-          btnGetraenke.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-          btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
-        }
-
-        const btnEssen = lastRow.querySelector('.btnAddEssen');
-        if (btnEssen) {
-          btnEssen.setAttribute('disabled', 'true');
-          btnEssen.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-          btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
-        }
-
-        const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
-        if (btnAbrechnen) {
-          btnAbrechnen.setAttribute('disabled', 'true');
-          btnAbrechnen.classList.remove('bg-gray-500', 'hover:bg-gray-600');
-          btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
-        }
-
-        const lastTd = lastRow.querySelectorAll('td')[5];
-        if (lastTd) {
-          lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
-        }
-      }
-    });
-  } else {
-    // Fallback: mindestens 4 leere Zeilen
-    for (let i = 0; i < 4; i++) addGuestRow();
-  }
-
-  document.getElementById('modalGame').classList.remove('hidden');
-  updateFinalizeButtonState();
-}
-
-// Beim Laden der Seite Firebase-Daten laden
-window.addEventListener('load', () => {
-  // Kurz warten bis Firebase initialisiert ist
-  setTimeout(() => {
-    loadGamesFromFirebase();
-  }, 1000);
-});
-
-// Eingabe-Validierung für Zahlenfelder
-document.addEventListener('input', (e) => {
-  if (e.target.type === 'number') {
-    const value = parseFloat(e.target.value);
-    if (isNaN(value) || value < 0) {
-      e.target.value = 0;
-    }
-  }
-});
-
-// Keyboard-Shortcuts
-document.addEventListener('keydown', (e) => {
-  // ESC zum Schließen von Modals
-  if (e.key === 'Escape') {
-    document.querySelectorAll('.fixed').forEach(modal => {
-      if (!modal.classList.contains('hidden')) {
-        modal.classList.add('hidden');
-      }
-    });
-    
-    // Reset aktuelle Variablen
-    aktuelleGetraenkeRow = null;
-    aktuelleEssenRow = null;
-    aktuelleAbrechnungRow = null;
-  }
-});
-
-// Modal-Hintergrund-Klicks zum Schließen
-document.querySelectorAll('.fixed').forEach(modal => {
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      modal.classList.add('hidden');
-      aktuelleGetraenkeRow = null;
-      aktuelleEssenRow = null;
-      aktuelleAbrechnungRow = null;
-    }
-  });
-});
-
-</script>
-</body>
-</html>Row.setAttribute('data-essen', gast.essen);
       if (gast.tip) lastRow.setAttribute('data-tip', gast.tip);
       
       updateGesamtbetrag(lastRow);
