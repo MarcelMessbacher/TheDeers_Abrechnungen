@@ -207,7 +207,7 @@ async function saveGameToFirebase(spielData) {
   try {
     if (!window.firebaseDB) {
       console.warn('Firebase nicht initialisiert');
-      return;
+      return null;
     }
     
     const docRef = await window.firebaseUtils.addDoc(
@@ -218,8 +218,47 @@ async function saveGameToFirebase(spielData) {
       }
     );
     console.log("Spiel in Firebase gespeichert mit ID: ", docRef.id);
+    return docRef.id;
   } catch (error) {
     console.error("Fehler beim Speichern in Firebase: ", error);
+    return null;
+  }
+}
+
+async function updateGameInFirebase(gameId, spielData) {
+  try {
+    if (!window.firebaseDB || !gameId) {
+      console.warn('Firebase nicht initialisiert oder keine Game-ID');
+      return false;
+    }
+    
+    const gameRef = window.firebaseUtils.doc(window.firebaseDB, "spiele", gameId);
+    await window.firebaseUtils.updateDoc(gameRef, {
+      ...spielData,
+      lastUpdated: new Date().toISOString()
+    });
+    console.log("Spiel in Firebase aktualisiert:", gameId);
+    return true;
+  } catch (error) {
+    console.error("Fehler beim Aktualisieren in Firebase: ", error);
+    return false;
+  }
+}
+
+async function deleteGameFromFirebase(gameId) {
+  try {
+    if (!window.firebaseDB || !gameId) {
+      console.warn('Firebase nicht initialisiert oder keine Game-ID');
+      return false;
+    }
+    
+    const gameRef = window.firebaseUtils.doc(window.firebaseDB, "spiele", gameId);
+    await window.firebaseUtils.deleteDoc(gameRef);
+    console.log("Spiel aus Firebase gelöscht:", gameId);
+    return true;
+  } catch (error) {
+    console.error("Fehler beim Löschen aus Firebase: ", error);
+    return false;
   }
 }
 
@@ -663,33 +702,102 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
     }
   });
 
-  const spielData = { team, opponent, date, gaeste };
+  // Status bestimmen: finalized wenn alle Gäste bezahlt haben, sonst draft
+  const allPaid = gaeste.length > 0 && gaeste.every(gast => gast.paid);
+  const spielData = { 
+    team, 
+    opponent, 
+    date, 
+    gaeste, 
+    status: allPaid ? 'finalized' : 'draft' 
+  };
 
   if (editIndex !== null) {
     // Update bestehendes Spiel
+    const existingGame = gespeicherteSpiele[editIndex];
+    spielData.firebaseId = existingGame.firebaseId; // Firebase-ID beibehalten
     gespeicherteSpiele[editIndex] = spielData;
+    
+    // In Firebase aktualisieren
+    if (spielData.firebaseId) {
+      await updateGameInFirebase(spielData.firebaseId, spielData);
+    }
+    
     editIndex = null;
   } else {
     // Neues Spiel speichern
+    const firebaseId = await saveGameToFirebase(spielData);
+    if (firebaseId) {
+      spielData.firebaseId = firebaseId;
+    }
     gespeicherteSpiele.push(spielData);
   }
-
-  // In Firebase speichern
-  await saveGameToFirebase(spielData);
 
   renderGames();
   document.getElementById('modalGame').classList.add('hidden');
   clearGameForm();
+  
+  // Erfolgs-Nachricht
+  const statusText = spielData.status === 'finalized' ? 'abgerechnet' : 'als Entwurf gespeichert';
+  alert(`Spiel wurde ${statusText}!`);
 });
 
-// PDF-Erstellung für Spiel-Abrechnung
-document.getElementById('btnFinalizeGame').addEventListener('click', () => {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
+// PDF-Erstellung für Spiel-Abrechnung (Final-Abrechnung)
+document.getElementById('btnFinalizeGame').addEventListener('click', async () => {
   const team = document.getElementById('selectTeam').value;
   const opponent = document.getElementById('inputOpponent').value;
   const date = document.getElementById('inputDate').value;
+
+  if (!team || !opponent || !date) {
+    alert('Bitte füllen Sie alle Pflichtfelder aus (Team, Gegner, Datum).');
+    return;
+  }
+
+  // Erst das Spiel als finalized speichern
+  const gaeste = [];
+  document.querySelectorAll('#tab_Gaeste tbody tr').forEach(row => {
+    const name = row.querySelector('input[type="text"]').value.trim();
+    if (name) {
+      gaeste.push({
+        name: name,
+        getraenke: row.getAttribute('data-getraenke'),
+        essen: row.getAttribute('data-essen'),
+        paid: row.getAttribute('data-paid') === 'true',
+        tip: row.getAttribute('data-tip') || '0.00'
+      });
+    }
+  });
+
+  const spielData = { 
+    team, 
+    opponent, 
+    date, 
+    gaeste, 
+    status: 'finalized',
+    finalizedAt: new Date().toISOString()
+  };
+
+  // Spiel als finalized speichern/updaten
+  if (editIndex !== null) {
+    const existingGame = gespeicherteSpiele[editIndex];
+    spielData.firebaseId = existingGame.firebaseId;
+    gespeicherteSpiele[editIndex] = spielData;
+    
+    if (spielData.firebaseId) {
+      await updateGameInFirebase(spielData.firebaseId, spielData);
+    }
+    editIndex = null;
+  } else {
+    const firebaseId = await saveGameToFirebase(spielData);
+    if (firebaseId) {
+      spielData.firebaseId = firebaseId;
+    }
+    gespeicherteSpiele.push(spielData);
+  }
+
+  // PDF erstellen
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
 
   const tableData = [];
   const drinksSummary = {};
@@ -697,16 +805,31 @@ document.getElementById('btnFinalizeGame').addEventListener('click', () => {
   let totalAmount = 0;
   let totalTip = 0;
 
-  document.querySelectorAll('#tab_Gaeste tbody tr').forEach(row => {
-    const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
-    if (name.trim() === '' || name === '(unbekannt)') return; // Leere Zeilen überspringen
+  gaeste.forEach(gast => {
+    const getraenke = JSON.parse(gast.getraenke || '{}');
+    const essen = JSON.parse(gast.essen || '{}');
+    
+    // Berechne Betrag für diesen Gast
+    let gastBetrag = 0;
+    
+    // Getränke berechnen
+    for (let [name, menge] of Object.entries(getraenke)) {
+      const getraenk = getraenkeListe.find(g => g.name === name);
+      if (getraenk) {
+        gastBetrag += getraenk.preis * menge;
+      }
+    }
+    
+    // Essen berechnen
+    for (let [name, menge] of Object.entries(essen)) {
+      const essenItem = essenListe.find(e => e.name === name);
+      if (essenItem) {
+        gastBetrag += essenItem.preis * menge;
+      }
+    }
 
-    const getraenke = JSON.parse(row.getAttribute('data-getraenke') || '{}');
-    const essen = JSON.parse(row.getAttribute('data-essen') || '{}');
-    const betrag = parseFloat(row.querySelector('.summeGesamt').textContent.replace(' €', '')) || 0;
-    const tip = parseFloat(row.getAttribute('data-tip') || '0');
-
-    totalAmount += betrag;
+    const tip = parseFloat(gast.tip || '0');
+    totalAmount += gastBetrag;
     totalTip += tip;
 
     // Getränke Text + Summen berechnen
@@ -728,10 +851,10 @@ document.getElementById('btnFinalizeGame').addEventListener('click', () => {
     }
 
     tableData.push([
-      name, 
+      gast.name, 
       getraenkeText.trim() || '-', 
       essenText.trim() || '-', 
-      betrag.toFixed(2) + ' €', 
+      gastBetrag.toFixed(2) + ' €', 
       tip.toFixed(2) + ' €'
     ]);
   });
@@ -778,7 +901,12 @@ document.getElementById('btnFinalizeGame').addEventListener('click', () => {
   const filename = `${date}_${team}_vs_${opponent.replace(/\s+/g, '_')}.pdf`;
   doc.save(filename);
 
-  alert('PDF wurde erstellt und heruntergeladen!');
+  // UI aktualisieren und Modal schließen
+  renderGames();
+  document.getElementById('modalGame').classList.add('hidden');
+  clearGameForm();
+  
+  alert('Spiel wurde final abgerechnet und PDF wurde erstellt!');
 });
 
 function renderGames() {
@@ -794,19 +922,39 @@ function renderGames() {
     const div = document.createElement('div');
     div.className = 'bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md transition-shadow';
 
-    // Prüfe ob alle Gäste bezahlt haben
+    // Status bestimmen
+    const isFinalized = spiel.status === 'finalized';
     const allPaid = spiel.gaeste && spiel.gaeste.length > 0 && spiel.gaeste.every(gast => gast.paid);
-    const statusIcon = allPaid ? '<span class="text-green-600 text-lg">✓</span>' : '<span class="text-orange-500 text-lg">⏳</span>';
+    
+    let statusIcon, statusText;
+    if (isFinalized) {
+      statusIcon = '<span class="text-green-600 text-lg font-bold">✓</span>';
+      statusText = '<span class="text-xs text-green-600 font-medium">ABGERECHNET</span>';
+    } else if (allPaid) {
+      statusIcon = '<span class="text-blue-600 text-lg">✓</span>';
+      statusText = '<span class="text-xs text-blue-600 font-medium">BEREIT FÜR ABRECHNUNG</span>';
+    } else {
+      statusIcon = '<span class="text-orange-500 text-lg">⏳</span>';
+      statusText = '<span class="text-xs text-orange-600 font-medium">ENTWURF</span>';
+    }
 
     div.innerHTML = `
       <div>
-        <strong>${spiel.team || 'Unbekanntes Team'}</strong> vs ${spiel.opponent || 'Unbekannter Gegner'} ${statusIcon}<br>
-        <span class="text-sm text-gray-500">${formatDate(spiel.date)}</span>
-        <span class="text-sm text-gray-500 ml-2">(${spiel.gaeste ? spiel.gaeste.length : 0} Gäste)</span>
+        <div class="flex items-center space-x-2">
+          <strong>${spiel.team || 'Unbekanntes Team'}</strong> 
+          <span class="text-gray-400">vs</span>
+          <span>${spiel.opponent || 'Unbekannter Gegner'}</span>
+          ${statusIcon}
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+          <span class="text-sm text-gray-500">${formatDate(spiel.date)}</span>
+          <span class="text-sm text-gray-500">(${spiel.gaeste ? spiel.gaeste.length : 0} Gäste)</span>
+          ${statusText}
+        </div>
       </div>
       <div class="flex space-x-2">
-        ${!allPaid ? `<button class="text-blue-600 hover:text-blue-800" onclick="editGame(${index})" title="Bearbeiten">✏️</button>` : ''}
-        <button class="text-red-600 hover:text-red-800" onclick="deleteGame(${index})" title="Löschen">🗑️</button>
+        ${!isFinalized ? `<button class="text-blue-600 hover:text-blue-800 text-lg" onclick="editGame(${index})" title="Bearbeiten">✏️</button>` : ''}
+        <button class="text-red-600 hover:text-red-800 text-lg" onclick="deleteGame(${index})" title="Löschen">🗑️</button>
       </div>
     `;
 
@@ -816,6 +964,13 @@ function renderGames() {
 
 function editGame(index) {
   const spiel = gespeicherteSpiele[index];
+  
+  // Verhindere Bearbeitung von finalisierten Spielen
+  if (spiel.status === 'finalized') {
+    alert('Dieses Spiel ist bereits final abgerechnet und kann nicht mehr bearbeitet werden.');
+    return;
+  }
+  
   editIndex = index;
 
   document.getElementById('selectTeam').value = spiel.team || '';
@@ -883,10 +1038,127 @@ function editGame(index) {
   updateFinalizeButtonState();
 }
 
+// Beim Laden der Seite Firebase-Daten laden
+window.addEventListener('load', () => {
+  // Kurz warten bis Firebase initialisiert ist
+  setTimeout(() => {
+    loadGamesFromFirebase();
+  }, 1000);
+});
+
+// Eingabe-Validierung für Zahlenfelder
+document.addEventListener('input', (e) => {
+  if (e.target.type === 'number') {
+    const value = parseFloat(e.target.value);
+    if (isNaN(value) || value < 0) {
+      e.target.value = 0;
+    }
+  }
+});
+
+// Keyboard-Shortcuts
+document.addEventListener('keydown', (e) => {
+  // ESC zum Schließen von Modals
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.fixed').forEach(modal => {
+      if (!modal.classList.contains('hidden')) {
+        modal.classList.add('hidden');
+      }
+    });
+    
+    // Reset aktuelle Variablen
+    aktuelleGetraenkeRow = null;
+    aktuelleEssenRow = null;
+    aktuelleAbrechnungRow = null;
+  }
+});
+
+// Modal-Hintergrund-Klicks zum Schließen
+document.querySelectorAll('.fixed').forEach(modal => {
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.classList.add('hidden');
+      aktuelleGetraenkeRow = null;
+      aktuelleEssenRow = null;
+      aktuelleAbrechnungRow = null;
+    }
+  });
+});
+
+</script>
+</body>
+</html>Row.setAttribute('data-essen', gast.essen);
+      if (gast.tip) lastRow.setAttribute('data-tip', gast.tip);
+      
+      updateGesamtbetrag(lastRow);
+      
+      if (gast.paid) {
+        lastRow.classList.add('bg-green-100');
+        lastRow.setAttribute('data-paid', 'true');
+
+        const nameInput = lastRow.querySelector('input[type="text"]');
+        if (nameInput) {
+          nameInput.setAttribute('disabled', 'true');
+          nameInput.classList.add('bg-gray-200');
+        }
+
+        const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
+        if (btnGetraenke) {
+          btnGetraenke.setAttribute('disabled', 'true');
+          btnGetraenke.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+          btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
+        }
+
+        const btnEssen = lastRow.querySelector('.btnAddEssen');
+        if (btnEssen) {
+          btnEssen.setAttribute('disabled', 'true');
+          btnEssen.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+          btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
+        }
+
+        const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
+        if (btnAbrechnen) {
+          btnAbrechnen.setAttribute('disabled', 'true');
+          btnAbrechnen.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+          btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
+        }
+
+        const lastTd = lastRow.querySelectorAll('td')[5];
+        if (lastTd) {
+          lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
+        }
+      }
+    });
+  } else {
+    // Fallback: mindestens 4 leere Zeilen
+    for (let i = 0; i < 4; i++) addGuestRow();
+  }
+
+  document.getElementById('modalGame').classList.remove('hidden');
+  updateFinalizeButtonState();
+}
+
 function deleteGame(index) {
   if (confirm('Sind Sie sicher, dass Sie dieses Spiel löschen möchten?')) {
+    const spiel = gespeicherteSpiele[index];
+    
+    // Aus Firebase löschen wenn Firebase-ID vorhanden
+    if (spiel.firebaseId) {
+      deleteGameFromFirebase(spiel.firebaseId).then(success => {
+        if (success) {
+          console.log('Spiel erfolgreich aus Firebase gelöscht');
+        } else {
+          console.warn('Fehler beim Löschen aus Firebase, aber lokaler Eintrag wird trotzdem entfernt');
+        }
+      });
+    }
+    
+    // Aus lokaler Liste entfernen
     gespeicherteSpiele.splice(index, 1);
     renderGames();
+    
+    // Erfolgs-Nachricht
+    alert('Spiel wurde gelöscht!');
   }
 }
 
