@@ -6,29 +6,52 @@
   <title>Heimspiel Verwaltung</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- jsPDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<!-- jsPDF-AutoTable -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- jsPDF-AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <!-- Firebase v10 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // Firebase Konfiguration
+    const firebaseConfig = {
+      apiKey: "AIzaSyD5B4C8EiEdLA2XWLzb2JvcFi9DAnV1M7E",
+      authDomain: "thedeersabrechnung.firebaseapp.com",
+      projectId: "thedeersabrechnung",
+      storageBucket: "thedeersabrechnung.firebasestorage.app",
+      messagingSenderId: "27261468983",
+      appId: "1:27261468983:web:1a6340756263aad9455ab2",
+      measurementId: "G-6KBNXWTYJ1"
+    };
+
+    // Firebase initialisieren
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Firebase Funktionen global verfügbar machen
+    window.firebaseDB = db;
+    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
+  </script>
 </head>
 <body class="bg-gray-100 p-6">
 
   <!-- Button: Neues Heimspiel -->
-  <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4">Neues Heimspiel</button>
+  <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4 hover:bg-green-700">Neues Heimspiel</button>
 
   <!-- Container für gespeicherte Formulare -->
   <div id="gamesContainer"></div>
 
   <!-- Modal: Spiel -->
   <div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white p-6 rounded w-full max-w-4xl">
+    <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold mb-4">Spiel</h2>
 
       <div class="flex space-x-4 mb-4">
         <!-- Dropdown Team -->
         <div>
           <label class="block text-sm font-medium mb-1">Team</label>
-          <select id="selectTeam" class="border rounded w-40">
+          <select id="selectTeam" class="border rounded w-40 p-2">
             <option value="">Bitte wählen</option>
             <option value="TheDeers I">TheDeers I</option>
             <option value="TheDeers II">TheDeers II</option>
@@ -40,13 +63,13 @@
         <!-- Gegner -->
         <div>
           <label class="block text-sm font-medium mb-1">Gegner</label>
-          <input type="text" id="inputOpponent" class="border rounded w-40" />
+          <input type="text" id="inputOpponent" class="border rounded w-40 p-2" />
         </div>
 
         <!-- Datum -->
         <div>
           <label class="block text-sm font-medium mb-1">Datum</label>
-          <input type="date" id="inputDate" class="border rounded w-40" />
+          <input type="date" id="inputDate" class="border rounded w-40 p-2" />
         </div>
       </div>
 
@@ -54,58 +77,58 @@
       <table class="w-full text-sm mb-4" id="tab_Gaeste">
         <thead class="bg-gray-200">
           <tr>
-            <th class="p-2">Name</th>
-            <th class="p-2">Getränke</th>
-            <th class="p-2">Essen</th>
-            <th class="p-2">Gesamtbetrag</th>
-            <th class="p-2">Abrechnung</th>
-			<th class="p-2"></th>
+            <th class="p-2 border">Name</th>
+            <th class="p-2 border">Getränke</th>
+            <th class="p-2 border">Essen</th>
+            <th class="p-2 border">Gesamtbetrag</th>
+            <th class="p-2 border">Abrechnung</th>
+            <th class="p-2 border">Aktion</th>
           </tr>
         </thead>
         <tbody>
           <!-- Zeilen werden dynamisch hinzugefügt -->
         </tbody>
       </table>
-      <button id="addGuestRow" class="text-blue-600 mb-4">+ Gast hinzufügen</button>
+      <button id="addGuestRow" class="text-blue-600 mb-4 hover:text-blue-800">+ Gast hinzufügen</button>
 
       <!-- Spiel abrechnen, Speichern & Schließen -->
-		<div class="flex justify-end space-x-2">
-		  <button id="btnFinalizeGame" class="bg-gray-400 cursor-not-allowed text-white px-4 py-2 rounded" disabled>Spiel abrechnen</button>
-		  <button id="btnSaveGame" class="bg-green-600 text-white px-4 py-2 rounded">Speichern</button>
-		  <button id="btnCloseGame" class="bg-gray-500 text-white px-4 py-2 rounded">Schließen</button>
-		</div>
+      <div class="flex justify-end space-x-2">
+        <button id="btnFinalizeGame" class="bg-gray-400 cursor-not-allowed text-white px-4 py-2 rounded" disabled>Spiel abrechnen</button>
+        <button id="btnSaveGame" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+        <button id="btnCloseGame" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+      </div>
 
     </div>
   </div>
 
   <!-- Modal: Getränke -->
   <div id="modalGetraenke" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white p-6 rounded w-full max-w-lg">
+    <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold mb-4">Getränke</h2>
       <table class="w-full text-sm mb-4" id="tab_Getraenke">
         <thead class="bg-gray-200">
           <tr>
-            <th class="p-2">Name</th>
-            <th class="p-2">Preis</th>
-            <th class="p-2">Anzahl</th>
-            <th class="p-2">Zwischensumme</th>
+            <th class="p-2 border">Name</th>
+            <th class="p-2 border">Preis</th>
+            <th class="p-2 border">Anzahl</th>
+            <th class="p-2 border">Zwischensumme</th>
           </tr>
         </thead>
         <tbody>
           <!-- Dynamisch befüllt -->
         </tbody>
       </table>
-      <div class="mb-4">Summe Getränke: <span id="summe_Getraenke">0.00</span> €</div>
+      <div class="mb-4 font-semibold">Summe Getränke: <span id="summe_Getraenke">0.00</span> €</div>
       <div class="flex justify-end space-x-2">
-        <button id="btnSaveGetraenke" class="bg-green-600 text-white px-4 py-2 rounded">Speichern</button>
-        <button id="btnCloseGetraenke" class="bg-gray-500 text-white px-4 py-2 rounded">Schließen</button>
+        <button id="btnSaveGetraenke" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+        <button id="btnCloseGetraenke" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
       </div>
     </div>
   </div>
 
   <!-- Modal: Essen -->
-  <div id="modalEssen" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-[9999]">
-    <div class="bg-white p-4 rounded w-1/2">
+  <div id="modalEssen" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-4 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold mb-4">Essen auswählen</h2>
       <table class="min-w-full border mb-4">
         <thead>
@@ -120,61 +143,115 @@
           <!-- Dynamisch per JS befüllt -->
         </tbody>
       </table>
-      <div class="mb-4">
+      <div class="mb-4 font-semibold">
         <strong>Gesamtsumme Essen:</strong> <span id="summe_Essen">0.00</span> €
       </div>
-      <button id="btnSaveEssen" class="bg-green-500 text-white px-4 py-2 rounded">Speichern</button>
-      <button id="btnCloseEssen" class="bg-gray-500 text-white px-4 py-2 rounded ml-2">Schließen</button>
+      <button id="btnSaveEssen" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Speichern</button>
+      <button id="btnCloseEssen" class="bg-gray-500 text-white px-4 py-2 rounded ml-2 hover:bg-gray-600">Schließen</button>
     </div>
   </div>
 
   <!-- Modal: Abrechnung -->
   <div id="modalAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white p-6 rounded w-full max-w-lg">
+    <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold mb-4">Abrechnung</h2>
       <div id="abrechnungContent"></div>
       <div class="my-4">
         <label class="block text-sm font-medium mb-1">Trinkgeld (€)</label>
-        <input type="number" id="inputTip" class="border rounded w-full" step="0.01" />
+        <input type="number" id="inputTip" class="border rounded w-full p-2" step="0.01" min="0" />
       </div>
       <div class="flex justify-end space-x-2">
-        <button id="btnPaid" class="bg-green-600 text-white px-4 py-2 rounded">Bezahlt</button>
-        <button id="btnCloseAbrechnung" class="bg-gray-500 text-white px-4 py-2 rounded">Schließen</button>
+        <button id="btnPaid" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Bezahlt</button>
+        <button id="btnCloseAbrechnung" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
       </div>
     </div>
   </div>
-
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyD5B4C8EiEdLA2XWLzb2JvcFi9DAnV1M7E",
-    authDomain: "thedeersabrechnung.firebaseapp.com",
-    projectId: "thedeersabrechnung",
-    storageBucket: "thedeersabrechnung.firebasestorage.app",
-    messagingSenderId: "27261468983",
-    appId: "1:27261468983:web:1a6340756263aad9455ab2",
-    measurementId: "G-6KBNXWTYJ1"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
 
 <script>
 
 let gespeicherteSpiele = [];
 let editIndex = null;
+let aktuelleGetraenkeRow = null;
+let aktuelleEssenRow = null;
 let aktuelleAbrechnungRow = null;
 
+// Getränke und Essen Daten
+const getraenkeListe = [
+  { name: 'Cola', preis: 2.50 },
+  { name: 'Bier', preis: 3.00 },
+  { name: 'Wasser', preis: 1.50 },
+  { name: 'Apfelschorle', preis: 2.00 }
+];
+
+const essenListe = [
+  { name: 'Wurst', preis: 3.50 },
+  { name: 'Steak', preis: 8.00 },
+  { name: 'Pommes', preis: 2.00 },
+  { name: 'Burger', preis: 6.50 }
+];
+
+// Hilfsfunktion zum Runden auf 2 Nachkommastellen
+function round2(num) {
+  return Math.round(num * 100) / 100;
+}
+
+// Hilfsfunktion für Datumsformatierung
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const [year, month, day] = dateString.split("-");
+  return `${day}.${month}.${year}`;
+}
+
+// Firebase Funktionen
+async function saveGameToFirebase(spielData) {
+  try {
+    if (!window.firebaseDB) {
+      console.warn('Firebase nicht initialisiert');
+      return;
+    }
+    
+    const docRef = await window.firebaseUtils.addDoc(
+      window.firebaseUtils.collection(window.firebaseDB, "spiele"), 
+      {
+        ...spielData,
+        timestamp: new Date().toISOString()
+      }
+    );
+    console.log("Spiel in Firebase gespeichert mit ID: ", docRef.id);
+  } catch (error) {
+    console.error("Fehler beim Speichern in Firebase: ", error);
+  }
+}
+
+async function loadGamesFromFirebase() {
+  try {
+    if (!window.firebaseDB) {
+      console.warn('Firebase nicht initialisiert');
+      return;
+    }
+    
+    const querySnapshot = await window.firebaseUtils.getDocs(
+      window.firebaseUtils.collection(window.firebaseDB, "spiele")
+    );
+    
+    gespeicherteSpiele = [];
+    querySnapshot.forEach((doc) => {
+      gespeicherteSpiele.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    renderGames();
+  } catch (error) {
+    console.error("Fehler beim Laden aus Firebase: ", error);
+  }
+}
+
+// Event Listeners
 document.getElementById('btnNewGame').addEventListener('click', () => {
+  editIndex = null;
+  clearGameForm();
   document.getElementById('modalGame').classList.remove('hidden');
   updateFinalizeButtonState();
   document.getElementById('inputDate').value = new Date().toISOString().split('T')[0];
@@ -183,7 +260,33 @@ document.getElementById('btnNewGame').addEventListener('click', () => {
 
 document.getElementById('btnCloseGame').addEventListener('click', () => {
   document.getElementById('modalGame').classList.add('hidden');
+  clearGameForm();
 });
+
+document.getElementById('btnCloseGetraenke').addEventListener('click', () => {
+  document.getElementById('modalGetraenke').classList.add('hidden');
+  aktuelleGetraenkeRow = null;
+});
+
+document.getElementById('btnCloseEssen').addEventListener('click', () => {
+  document.getElementById('modalEssen').classList.add('hidden');
+  aktuelleEssenRow = null;
+});
+
+document.getElementById('btnCloseAbrechnung').addEventListener('click', () => {
+  document.getElementById('modalAbrechnung').classList.add('hidden');
+  aktuelleAbrechnungRow = null;
+});
+
+document.getElementById('addGuestRow').addEventListener('click', addGuestRow);
+
+// Form zurücksetzen
+function clearGameForm() {
+  document.getElementById('selectTeam').value = '';
+  document.getElementById('inputOpponent').value = '';
+  document.getElementById('inputDate').value = '';
+  document.querySelector('#tab_Gaeste tbody').innerHTML = '';
+}
 
 function initializeGaesteTable() {
   const tbody = document.querySelector('#tab_Gaeste tbody');
@@ -196,21 +299,21 @@ function addGuestRow() {
   const row = document.createElement('tr');
   row.innerHTML = `
     <td class="border p-2">
-      <input type="text" class="border rounded w-full" placeholder="Name" />
+      <input type="text" class="border rounded w-full p-1" placeholder="Name" />
     </td>
     <td class="border p-2">
-      <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddGetraenke">+ Hinzufügen</button>
+      <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddGetraenke hover:bg-blue-600">+ Hinzufügen</button>
     </td>
     <td class="border p-2">
-      <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddEssen">+ Hinzufügen</button>
+      <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddEssen hover:bg-blue-600">+ Hinzufügen</button>
     </td>
-    <td class="summeGesamt">0.00 €</td>
+    <td class="border p-2 summeGesamt text-right">0.00 €</td>
     <td class="border p-2">
-      <button class="bg-gray-500 text-white px-2 py-1 rounded btnAbrechnen">Abrechnen</button>
+      <button class="bg-gray-500 text-white px-2 py-1 rounded btnAbrechnen hover:bg-gray-600">Abrechnen</button>
     </td>
-	<td class="border p-2 text-center">
-        <button class="bg-red-600 text-white px-2 py-1 rounded btnDeleteGuest">X</button>
-      </td>
+    <td class="border p-2 text-center">
+      <button class="bg-red-600 text-white px-2 py-1 rounded btnDeleteGuest hover:bg-red-700">X</button>
+    </td>
   `;
   tbody.appendChild(row);
 
@@ -218,32 +321,11 @@ function addGuestRow() {
   row.querySelector('.btnAddGetraenke').addEventListener('click', () => openGetraenkeModal(row));
   row.querySelector('.btnAddEssen').addEventListener('click', () => openEssenModal(row));
   row.querySelector('.btnAbrechnen').addEventListener('click', () => openAbrechnungModal(row));
-row.querySelector('.btnDeleteGuest').addEventListener('click', () => {
-        row.remove();
-    });
-  }
-  
-
-// Getränke und Essen Daten (Beispiel)
-const getraenkeListe = [
-  { name: 'Cola', preis: 2.50 },
-  { name: 'Bier', preis: 3.00 },
-  { name: 'Wasser', preis: 1.50 }
-];
-
-const essenListe = [
-  { name: 'Wurst', preis: 3.50 },
-  { name: 'Steak', preis: 8.00 },
-  { name: 'Pommes', preis: 2.00 }
-];
-
-// Hilfsfunktion zum Runden auf 2 Nachkommastellen
-function round2(num) {
-  return Math.round(num * 100) / 100;
+  row.querySelector('.btnDeleteGuest').addEventListener('click', () => {
+    row.remove();
+    updateFinalizeButtonState();
+  });
 }
-
-let aktuelleGetraenkeRow = null;
-let aktuelleEssenRow = null;
 
 // Getränke Modal öffnen
 function openGetraenkeModal(row) {
@@ -261,11 +343,11 @@ function openGetraenkeModal(row) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="p-2 border">${getraenk.name}</td>
-      <td class="p-2 border">${getraenk.preis.toFixed(2)} €</td>
-      <td class="p-2 border">
-        <input type="number" min="0" value="${menge}" class="inputAnzahl border rounded w-16" data-preis="${getraenk.preis}" />
+      <td class="p-2 border text-right">${getraenk.preis.toFixed(2)} €</td>
+      <td class="p-2 border text-center">
+        <input type="number" min="0" value="${menge}" class="inputAnzahl border rounded w-16 text-center p-1" data-preis="${getraenk.preis}" />
       </td>
-      <td class="p-2 border zwischensumme">${zwischensumme} €</td>
+      <td class="p-2 border zwischensumme text-right">${zwischensumme} €</td>
     `;
     tbody.appendChild(tr);
 
@@ -331,7 +413,7 @@ function openEssenModal(row) {
       <td class="border px-2 py-1">${item.name}</td>
       <td class="border px-2 py-1 text-right">${item.preis.toFixed(2)}</td>
       <td class="border px-2 py-1 text-center">
-        <input type="number" min="0" value="${menge}" class="inputEssenAnzahl border rounded w-16" data-preis="${item.preis}" />
+        <input type="number" min="0" value="${menge}" class="inputEssenAnzahl border rounded w-16 text-center p-1" data-preis="${item.preis}" />
       </td>
       <td class="border px-2 py-1 text-right zwischensumme">${zwischensumme}</td>
     `;
@@ -417,8 +499,7 @@ function updateGesamtbetrag(row) {
 
 // Abrechnung Modal öffnen
 function openAbrechnungModal(row) {
-aktuelleAbrechnungRow = row;
-
+  aktuelleAbrechnungRow = row;
   const abrechnung = document.getElementById('abrechnungContent');
   const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
   const summeText = row.querySelector('.summeGesamt').textContent || '0.00 €';
@@ -429,7 +510,7 @@ aktuelleAbrechnungRow = row;
   if (gespeicherteGetraenke) {
     const getraenkeData = JSON.parse(gespeicherteGetraenke);
     if (Object.keys(getraenkeData).length === 0) {
-      getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
+      getraenkeHtml += '<p class="text-gray-500">Keine Getränke gewählt.</p>';
     } else {
       getraenkeHtml += '<ul class="list-disc ml-5">';
       for (const nameGetr in getraenkeData) {
@@ -441,7 +522,7 @@ aktuelleAbrechnungRow = row;
       getraenkeHtml += '</ul>';
     }
   } else {
-    getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
+    getraenkeHtml += '<p class="text-gray-500">Keine Getränke gewählt.</p>';
   }
 
   // Essen laden
@@ -450,7 +531,7 @@ aktuelleAbrechnungRow = row;
   if (gespeicherteEssen) {
     const essenData = JSON.parse(gespeicherteEssen);
     if (Object.keys(essenData).length === 0) {
-      essenHtml += '<p>Kein Essen gewählt.</p>';
+      essenHtml += '<p class="text-gray-500">Kein Essen gewählt.</p>';
     } else {
       essenHtml += '<ul class="list-disc ml-5">';
       for (const nameEssen in essenData) {
@@ -462,23 +543,29 @@ aktuelleAbrechnungRow = row;
       essenHtml += '</ul>';
     }
   } else {
-    essenHtml += '<p>Kein Essen gewählt.</p>';
+    essenHtml += '<p class="text-gray-500">Kein Essen gewählt.</p>';
   }
 
   abrechnung.innerHTML = `
-    <p><strong>Gast:</strong> ${name}</p>
-    <p><strong>Betrag:</strong> ${summeText}</p>
-    ${getraenkeHtml}
-    ${essenHtml}
+    <div class="bg-gray-50 p-3 rounded">
+      <p><strong>Gast:</strong> ${name}</p>
+      <p><strong>Gesamtbetrag:</strong> ${summeText}</p>
+      ${getraenkeHtml}
+      ${essenHtml}
+    </div>
   `;
 
   document.getElementById('inputTip').value = '';
   document.getElementById('modalAbrechnung').classList.remove('hidden');
 }
 
+// Event-Listener für „Bezahlt"-Button
 document.getElementById('btnPaid').addEventListener('click', () => {
   if (!aktuelleAbrechnungRow) return;
-  
+
+  const tipAmount = parseFloat(document.getElementById('inputTip').value) || 0;
+  aktuelleAbrechnungRow.setAttribute('data-tip', tipAmount.toFixed(2));
+
   // 1. Markiere als abgerechnet
   aktuelleAbrechnungRow.classList.add('bg-green-100');
   aktuelleAbrechnungRow.setAttribute('data-paid', 'true');
@@ -487,14 +574,14 @@ document.getElementById('btnPaid').addEventListener('click', () => {
   const nameInput = aktuelleAbrechnungRow.querySelector('input[type="text"]');
   if (nameInput) {
     nameInput.setAttribute('disabled', 'true');
-    nameInput.classList.add('bg-gray-200'); // optional: ausgegraut darstellen
+    nameInput.classList.add('bg-gray-200');
   }
 
   // 3. Getränke Button deaktivieren
   const btnGetraenke = aktuelleAbrechnungRow.querySelector('.btnAddGetraenke');
   if (btnGetraenke) {
     btnGetraenke.setAttribute('disabled', 'true');
-    btnGetraenke.classList.remove('bg-blue-500');
+    btnGetraenke.classList.remove('bg-blue-500', 'hover:bg-blue-600');
     btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
   }
 
@@ -502,7 +589,7 @@ document.getElementById('btnPaid').addEventListener('click', () => {
   const btnEssen = aktuelleAbrechnungRow.querySelector('.btnAddEssen');
   if (btnEssen) {
     btnEssen.setAttribute('disabled', 'true');
-    btnEssen.classList.remove('bg-blue-500');
+    btnEssen.classList.remove('bg-blue-500', 'hover:bg-blue-600');
     btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
   }
 
@@ -510,60 +597,70 @@ document.getElementById('btnPaid').addEventListener('click', () => {
   const btnAbrechnen = aktuelleAbrechnungRow.querySelector('.btnAbrechnen');
   if (btnAbrechnen) {
     btnAbrechnen.setAttribute('disabled', 'true');
-    btnAbrechnen.classList.remove('bg-gray-500');
+    btnAbrechnen.classList.remove('bg-gray-500', 'hover:bg-gray-600');
     btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
   }
 
-  // 6. Löschbutton entfernen
-  const deleteCell = aktuelleAbrechnungRow.querySelector('.btnDeleteGuest');
-  if (deleteCell) {
-    deleteCell.remove();
-  }
-  
-    // 7. Hier setzen wir den grünen Haken in der letzten Zelle
-  const iconHtml = '<span class="text-green-600 text-xl">&#10004;</span>'; // Unicode Haken ✔
-  
-  // Angenommen, die letzte Spalte ist die 6. td (index 5)
+  // 6. Löschbutton durch grünen Haken ersetzen
   const lastTd = aktuelleAbrechnungRow.querySelectorAll('td')[5];
-  lastTd.innerHTML = iconHtml;
+  if (lastTd) {
+    lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
+  }
 
   document.getElementById('modalAbrechnung').classList.add('hidden');
   aktuelleAbrechnungRow = null;
   updateFinalizeButtonState();
-
-  // Modal schließen
-  document.getElementById('modalAbrechnung').classList.add('hidden');
-  aktuelleAbrechnungRow = null;
 });
 
+function updateFinalizeButtonState() {
+  const rows = document.querySelectorAll('#tab_Gaeste tbody tr');
+  if (rows.length === 0) return;
 
+  // Prüfe ob alle Gäste mit Namen auch bezahlt haben
+  const gaesteWithNames = Array.from(rows).filter(row => {
+    const name = row.querySelector('input[type="text"]').value.trim();
+    return name !== '';
+  });
 
-document.getElementById('btnCloseAbrechnung').addEventListener('click', () => {
-  document.getElementById('modalAbrechnung').classList.add('hidden');
-});
+  const allPaid = gaesteWithNames.length > 0 && gaesteWithNames.every(row => row.getAttribute('data-paid') === 'true');
 
-document.getElementById('btnPaid').addEventListener('click', () => {
-  document.getElementById('modalAbrechnung').classList.add('hidden');
-});
+  const btn = document.getElementById('btnFinalizeGame');
+  if (!btn) return;
 
-document.getElementById('addGuestRow').addEventListener('click', addGuestRow);
+  if (allPaid) {
+    btn.disabled = false;
+    btn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+  } else {
+    btn.disabled = true;
+    btn.classList.add('bg-gray-400', 'cursor-not-allowed');
+    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+  }
+}
 
 // Speichern des gesamten Spiels
-document.getElementById('btnSaveGame').addEventListener('click', () => {
+document.getElementById('btnSaveGame').addEventListener('click', async () => {
   const team = document.getElementById('selectTeam').value;
   const opponent = document.getElementById('inputOpponent').value;
   const date = document.getElementById('inputDate').value;
 
+  if (!team || !opponent || !date) {
+    alert('Bitte füllen Sie alle Pflichtfelder aus (Team, Gegner, Datum).');
+    return;
+  }
+
   const gaeste = [];
   document.querySelectorAll('#tab_Gaeste tbody tr').forEach(row => {
-	gaeste.push({
-	  name: row.querySelector('input[type="text"]').value,
-	  getraenke: row.getAttribute('data-getraenke'),
-	  essen: row.getAttribute('data-essen'),
-	  paid: row.getAttribute('data-paid') === 'true'
-	});
-
-
+    const name = row.querySelector('input[type="text"]').value.trim();
+    if (name) { // Nur Gäste mit Namen speichern
+      gaeste.push({
+        name: name,
+        getraenke: row.getAttribute('data-getraenke'),
+        essen: row.getAttribute('data-essen'),
+        paid: row.getAttribute('data-paid') === 'true',
+        tip: row.getAttribute('data-tip') || '0.00'
+      });
+    }
   });
 
   const spielData = { team, opponent, date, gaeste };
@@ -577,135 +674,16 @@ document.getElementById('btnSaveGame').addEventListener('click', () => {
     gespeicherteSpiele.push(spielData);
   }
 
+  // In Firebase speichern
+  await saveGameToFirebase(spielData);
+
   renderGames();
   document.getElementById('modalGame').classList.add('hidden');
+  clearGameForm();
 });
 
-// auch in Firebase speichern test
-saveGameToFirebase(spielData);
-
-
-// Abrechnung Modal öffnen
-function openAbrechnungModal(row) {
-  aktuelleAbrechnungRow = row;
-  const abrechnung = document.getElementById('abrechnungContent');
-  const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
-  const summeText = row.querySelector('.summeGesamt').textContent || '0.00 €';
-
-  // Getränke laden
-  let getraenkeHtml = '<h3 class="font-semibold mt-2">Getränke:</h3>';
-  let gespeicherteGetraenke = row.getAttribute('data-getraenke');
-  if (gespeicherteGetraenke) {
-    const getraenkeData = JSON.parse(gespeicherteGetraenke);
-    if (Object.keys(getraenkeData).length === 0) {
-      getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
-    } else {
-      getraenkeHtml += '<ul class="list-disc ml-5">';
-      for (const nameGetr in getraenkeData) {
-        const menge = getraenkeData[nameGetr];
-        const getraenk = getraenkeListe.find(g => g.name === nameGetr);
-        const preis = getraenk ? getraenk.preis : 0;
-        getraenkeHtml += `<li>${nameGetr}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
-      }
-      getraenkeHtml += '</ul>';
-    }
-  } else {
-    getraenkeHtml += '<p>Keine Getränke gewählt.</p>';
-  }
-
-  // Essen laden
-  let essenHtml = '<h3 class="font-semibold mt-2">Essen:</h3>';
-  let gespeicherteEssen = row.getAttribute('data-essen');
-  if (gespeicherteEssen) {
-    const essenData = JSON.parse(gespeicherteEssen);
-    if (Object.keys(essenData).length === 0) {
-      essenHtml += '<p>Kein Essen gewählt.</p>';
-    } else {
-      essenHtml += '<ul class="list-disc ml-5">';
-      for (const nameEssen in essenData) {
-        const menge = essenData[nameEssen];
-        const essen = essenListe.find(e => e.name === nameEssen);
-        const preis = essen ? essen.preis : 0;
-        essenHtml += `<li>${nameEssen}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
-      }
-      essenHtml += '</ul>';
-    }
-  } else {
-    essenHtml += '<p>Kein Essen gewählt.</p>';
-  }
-
-  abrechnung.innerHTML = `
-    <p><strong>Name:</strong> ${name}</p>
-    <p><strong>Gesamtbetrag:</strong> ${summeText}</p>
-    ${getraenkeHtml}
-    ${essenHtml}
-  `;
-
-  document.getElementById('inputTip').value = '';
-  document.getElementById('modalAbrechnung').classList.remove('hidden');
-}
-
-// Event-Listener für „Bezahlt“-Button
-document.getElementById('btnPaid').addEventListener('click', () => {
-  if (!aktuelleAbrechnungRow) return;
-
-  // Markiere Zeile als abgerechnet (z.B. Hintergrundfarbe grün)
-  aktuelleAbrechnungRow.classList.add('bg-green-100');
-
-  // Optional: Ersetze den „Abrechnen“-Button durch „Abgerechnet“
-  const abrechnenCell = aktuelleAbrechnungRow.querySelector('td:last-child');
-  abrechnenCell.innerHTML = '<span class="text-green-600 font-semibold">Abgerechnet</span>';
-
-  // Schließe Modal
-  document.getElementById('modalAbrechnung').classList.add('hidden');
-  aktuelleAbrechnungRow = null;
-});
-
-// Schließen-Button im Abrechnen-Modal
-document.getElementById('btnCloseAbrechnung').addEventListener('click', () => {
-  document.getElementById('modalAbrechnung').classList.add('hidden');
-  aktuelleAbrechnungRow = null;
-});
-
-// Schließen-Button im Abrechnen-Modal
-document.getElementById('btnCloseGetraenke').addEventListener('click', () => {
-  document.getElementById('modalGetraenke').classList.add('hidden');
-  aktuelleAbrechnungRow = null;
-});
-
-// Schließen-Button im Abrechnen-Modal
-document.getElementById('btnCloseEssen').addEventListener('click', () => {
-  document.getElementById('modalEssen').classList.add('hidden');
-  aktuelleAbrechnungRow = null;
-});
-
-function formatDate(dateString) {
-  const [year, month, day] = dateString.split("-");
-  return `${day}.${month}.${year}`;
-}
-
-
-function updateFinalizeButtonState() {
-  const rows = document.querySelectorAll('#tab_Gaeste tbody tr');
-  if (rows.length === 0) return;
-
-  const allPaid = Array.from(rows).every(row => row.getAttribute('data-paid') === 'true');
-
-  const btn = document.getElementById('btnFinalizeGame');
-  if (!btn) return;
-
-  if (allPaid) {
-    btn.disabled = false;
-    btn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-    btn.classList.add('bg-blue-600');
-  } else {
-    btn.disabled = true;
-    btn.classList.add('bg-gray-400', 'cursor-not-allowed');
-    btn.classList.remove('bg-blue-600');
-  }
-}
-
-document.getElementById('btnFinalizeGame').addEventListener('click', async () => {
+// PDF-Erstellung für Spiel-Abrechnung
+document.getElementById('btnFinalizeGame').addEventListener('click', () => {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
@@ -716,13 +694,20 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async () =>
   const tableData = [];
   const drinksSummary = {};
   const foodSummary = {};
+  let totalAmount = 0;
+  let totalTip = 0;
 
   document.querySelectorAll('#tab_Gaeste tbody tr').forEach(row => {
     const name = row.querySelector('input[type="text"]').value || '(unbekannt)';
+    if (name.trim() === '' || name === '(unbekannt)') return; // Leere Zeilen überspringen
+
     const getraenke = JSON.parse(row.getAttribute('data-getraenke') || '{}');
     const essen = JSON.parse(row.getAttribute('data-essen') || '{}');
-    const betrag = row.querySelector('.summeGesamt').textContent.replace(' €', '');
-    const tip = row.getAttribute('data-tip') || '0.00';
+    const betrag = parseFloat(row.querySelector('.summeGesamt').textContent.replace(' €', '')) || 0;
+    const tip = parseFloat(row.getAttribute('data-tip') || '0');
+
+    totalAmount += betrag;
+    totalTip += tip;
 
     // Getränke Text + Summen berechnen
     let getraenkeText = '';
@@ -742,82 +727,87 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async () =>
       }
     }
 
-    tableData.push([name, getraenkeText.trim(), essenText.trim(), betrag + ' €', tip + ' €']);
+    tableData.push([
+      name, 
+      getraenkeText.trim() || '-', 
+      essenText.trim() || '-', 
+      betrag.toFixed(2) + ' €', 
+      tip.toFixed(2) + ' €'
+    ]);
   });
 
   // Summenzeile
-  const getraenkeSumme = Object.entries(drinksSummary).map(([k, v]) => `${k} (${v})`).join(' ');
-  const essenSumme = Object.entries(foodSummary).map(([k, v]) => `${k} (${v})`).join(' ');
+  const getraenkeSumme = Object.entries(drinksSummary).map(([k, v]) => `${k} (${v})`).join(', ') || '-';
+  const essenSumme = Object.entries(foodSummary).map(([k, v]) => `${k} (${v})`).join(', ') || '-';
 
-  tableData.push(['SUMME', getraenkeSumme, essenSumme, '', '']);
+  tableData.push([
+    'SUMME', 
+    getraenkeSumme, 
+    essenSumme, 
+    totalAmount.toFixed(2) + ' €', 
+    totalTip.toFixed(2) + ' €'
+  ]);
 
   // PDF erstellen
-  doc.text(`Abrechnung: ${team} vs ${opponent} am ${date}`, 10, 10);
+  doc.setFontSize(16);
+  doc.text(`Abrechnung: ${team} vs ${opponent}`, 10, 15);
+  doc.setFontSize(12);
+  doc.text(`Datum: ${formatDate(date)}`, 10, 25);
+
   doc.autoTable({
     head: [['Name', 'Getränke', 'Essen', 'Zwischensumme', 'Trinkgeld']],
     body: tableData,
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: [100, 100, 100] },
-    startY: 20,
-    foot: [['', '', '', '', '']],
-    didDrawCell: (data) => {
+    styles: { fontSize: 9, cellPadding: 2 },
+    headStyles: { fillColor: [70, 130, 180], textColor: 255 },
+    startY: 35,
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    didParseCell: function (data) {
       if (data.row.index === tableData.length - 1) {
-        doc.setFont(undefined, 'bold');
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fillColor = [220, 220, 220];
       }
     }
   });
-	// PDF als Blob exportieren
-	const pdfBlob = doc.output('blob');
-	
-	// NextCloud Zugangsdaten
-	const nextcloudURL = "https://thedeers.ddns.net/nextcloud/index.php/apps/files/files/52396?dir=/Finanzen/Abrechnungen%20Spieltage";
-	const username = "MarcelMessbacher";
-	const password = "marcel@thedeers";
-	
-	// API Aufruf, um die Datei hochzuladen
-	const filename = `${date}_${team}_${opponent}.pdf`.replace(/\s+/g, '_');
-	const proxyUrl = "https://cors-anywhere.herokuapp.com/";
-	const uploadUrl = proxyUrl + nextcloudURL + filename;
-	
-	try {
-		const response = await fetch(uploadUrl, {
-		method: 'PUT',
-		headers: {
-			'Authorization': 'Basic' + btoa(username + ":" + password)
-			},
-		body: pdfBlob
-		});
-		
-		if (response.ok) {
-			alert("PDF erfolgreich hochgeladen!");
-		} else {
-			alert("Fehler beim Hochladen der PDF: " + response.status);
-		}
-		} catch (error) {
-			console.error("Fehler:", error);
-			alert("Es gab ein Problem beim Hochladen der Datei.");
-		}
+
+  // Gesamtsumme am Ende
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(12);
+  doc.text(`Gesamtumsatz: ${(totalAmount + totalTip).toFixed(2)} €`, 10, finalY);
+
+  // PDF downloaden
+  const filename = `${date}_${team}_vs_${opponent.replace(/\s+/g, '_')}.pdf`;
+  doc.save(filename);
+
+  alert('PDF wurde erstellt und heruntergeladen!');
 });
-
-
 
 function renderGames() {
   const container = document.getElementById('gamesContainer');
   container.innerHTML = '';
 
+  if (gespeicherteSpiele.length === 0) {
+    container.innerHTML = '<p class="text-gray-500 text-center">Noch keine Spiele gespeichert.</p>';
+    return;
+  }
+
   gespeicherteSpiele.forEach((spiel, index) => {
     const div = document.createElement('div');
-    div.className = 'bg-white shadow p-4 mb-2 flex justify-between items-center rounded';
+    div.className = 'bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md transition-shadow';
+
+    // Prüfe ob alle Gäste bezahlt haben
+    const allPaid = spiel.gaeste && spiel.gaeste.length > 0 && spiel.gaeste.every(gast => gast.paid);
+    const statusIcon = allPaid ? '<span class="text-green-600 text-lg">✓</span>' : '<span class="text-orange-500 text-lg">⏳</span>';
 
     div.innerHTML = `
       <div>
-        <strong>${spiel.team}</strong> vs ${spiel.opponent} <br>
-		<span class="text-sm text-gray-500">${formatDate(spiel.date)}</span>
-
+        <strong>${spiel.team || 'Unbekanntes Team'}</strong> vs ${spiel.opponent || 'Unbekannter Gegner'} ${statusIcon}<br>
+        <span class="text-sm text-gray-500">${formatDate(spiel.date)}</span>
+        <span class="text-sm text-gray-500 ml-2">(${spiel.gaeste ? spiel.gaeste.length : 0} Gäste)</span>
       </div>
-      ${spiel.abgerechnet ? `<a href="${spiel.pdfPfad}" target="_blank" title="PDF anzeigen">📄</a>` :
-	`<button class="text-blue-600" onclick="editGame(${index})">✏️</button>`}
-
+      <div class="flex space-x-2">
+        ${!allPaid ? `<button class="text-blue-600 hover:text-blue-800" onclick="editGame(${index})" title="Bearbeiten">✏️</button>` : ''}
+        <button class="text-red-600 hover:text-red-800" onclick="deleteGame(${index})" title="Löschen">🗑️</button>
+      </div>
     `;
 
     container.appendChild(div);
@@ -828,69 +818,124 @@ function editGame(index) {
   const spiel = gespeicherteSpiele[index];
   editIndex = index;
 
-  document.getElementById('selectTeam').value = spiel.team;
-  document.getElementById('inputOpponent').value = spiel.opponent;
-  document.getElementById('inputDate').value = spiel.date;
+  document.getElementById('selectTeam').value = spiel.team || '';
+  document.getElementById('inputOpponent').value = spiel.opponent || '';
+  document.getElementById('inputDate').value = spiel.date || '';
 
   // Gäste laden
   const tbody = document.querySelector('#tab_Gaeste tbody');
   tbody.innerHTML = '';
-  spiel.gaeste.forEach(gast => {
-    addGuestRow();
-    const lastRow = tbody.lastChild;
-    lastRow.querySelector('input[type="text"]').value = gast.name;
-    if (gast.getraenke) lastRow.setAttribute('data-getraenke', gast.getraenke);
-    if (gast.essen) lastRow.setAttribute('data-essen', gast.essen);
-    updateGesamtbetrag(lastRow);
-	if (gast.paid) {
-  lastRow.classList.add('bg-green-100');
-  lastRow.setAttribute('data-paid', 'true'); // ✅ WICHTIG
+  
+  if (spiel.gaeste && spiel.gaeste.length > 0) {
+    spiel.gaeste.forEach(gast => {
+      addGuestRow();
+      const lastRow = tbody.lastChild;
+      lastRow.querySelector('input[type="text"]').value = gast.name || '';
+      if (gast.getraenke) lastRow.setAttribute('data-getraenke', gast.getraenke);
+      if (gast.essen) lastRow.setAttribute('data-essen', gast.essen);
+      if (gast.tip) lastRow.setAttribute('data-tip', gast.tip);
+      
+      updateGesamtbetrag(lastRow);
+      
+      if (gast.paid) {
+        lastRow.classList.add('bg-green-100');
+        lastRow.setAttribute('data-paid', 'true');
 
-  const nameInput = lastRow.querySelector('input[type="text"]');
-  if (nameInput) {
-    nameInput.setAttribute('disabled', 'true');
-    nameInput.classList.add('bg-gray-200');
+        const nameInput = lastRow.querySelector('input[type="text"]');
+        if (nameInput) {
+          nameInput.setAttribute('disabled', 'true');
+          nameInput.classList.add('bg-gray-200');
+        }
+
+        const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
+        if (btnGetraenke) {
+          btnGetraenke.setAttribute('disabled', 'true');
+          btnGetraenke.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+          btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
+        }
+
+        const btnEssen = lastRow.querySelector('.btnAddEssen');
+        if (btnEssen) {
+          btnEssen.setAttribute('disabled', 'true');
+          btnEssen.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+          btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
+        }
+
+        const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
+        if (btnAbrechnen) {
+          btnAbrechnen.setAttribute('disabled', 'true');
+          btnAbrechnen.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+          btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
+        }
+
+        const lastTd = lastRow.querySelectorAll('td')[5];
+        if (lastTd) {
+          lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
+        }
+      }
+    });
+  } else {
+    // Fallback: mindestens 4 leere Zeilen
+    for (let i = 0; i < 4; i++) addGuestRow();
   }
-
-  const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
-  if (btnGetraenke) {
-    btnGetraenke.setAttribute('disabled', 'true');
-    btnGetraenke.classList.remove('bg-blue-500');
-    btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
-  }
-
-  const btnEssen = lastRow.querySelector('.btnAddEssen');
-  if (btnEssen) {
-    btnEssen.setAttribute('disabled', 'true');
-    btnEssen.classList.remove('bg-blue-500');
-    btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
-  }
-
-  const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
-  if (btnAbrechnen) {
-    btnAbrechnen.setAttribute('disabled', 'true');
-    btnAbrechnen.classList.remove('bg-gray-500');
-    btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
-  }
-
-  const deleteCell = lastRow.querySelector('.btnDeleteGuest');
-  if (deleteCell) {
-    deleteCell.remove();
-  }
-
-  const lastTd = lastRow.querySelectorAll('td')[5];
-  if (lastTd) {
-    lastTd.innerHTML = '<span class="text-green-600 text-xl">&#10004;</span>';
-  }
-}
-
-
-  });
 
   document.getElementById('modalGame').classList.remove('hidden');
   updateFinalizeButtonState();
 }
 
+function deleteGame(index) {
+  if (confirm('Sind Sie sicher, dass Sie dieses Spiel löschen möchten?')) {
+    gespeicherteSpiele.splice(index, 1);
+    renderGames();
+  }
+}
+
+// Beim Laden der Seite Firebase-Daten laden
+window.addEventListener('load', () => {
+  // Kurz warten bis Firebase initialisiert ist
+  setTimeout(() => {
+    loadGamesFromFirebase();
+  }, 1000);
+});
+
+// Eingabe-Validierung für Zahlenfelder
+document.addEventListener('input', (e) => {
+  if (e.target.type === 'number') {
+    const value = parseFloat(e.target.value);
+    if (isNaN(value) || value < 0) {
+      e.target.value = 0;
+    }
+  }
+});
+
+// Keyboard-Shortcuts
+document.addEventListener('keydown', (e) => {
+  // ESC zum Schließen von Modals
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.fixed').forEach(modal => {
+      if (!modal.classList.contains('hidden')) {
+        modal.classList.add('hidden');
+      }
+    });
+    
+    // Reset aktuelle Variablen
+    aktuelleGetraenkeRow = null;
+    aktuelleEssenRow = null;
+    aktuelleAbrechnungRow = null;
+  }
+});
+
+// Modal-Hintergrund-Klicks zum Schließen
+document.querySelectorAll('.fixed').forEach(modal => {
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.classList.add('hidden');
+      aktuelleGetraenkeRow = null;
+      aktuelleEssenRow = null;
+      aktuelleAbrechnungRow = null;
+    }
+  });
+});
 
 </script>
 </body>
