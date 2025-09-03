@@ -34,6 +34,32 @@
     window.firebaseDB = db;
     window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
   </script>
+  <style>
+    .modal-game-background {
+      background-image: url('The Deers Logo dunkelgrau-hellgrau.svg');
+      background-repeat: no-repeat;
+      background-position: center center;
+      background-size: contain;
+      background-attachment: fixed;
+      position: relative;
+    }
+    
+    .modal-game-background::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.85);
+      z-index: 1;
+    }
+    
+    .modal-game-content {
+      position: relative;
+      z-index: 2;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 p-6">
 
@@ -51,60 +77,61 @@
 
   <!-- Modal: Spiel -->
   <div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-      <h2 class="text-xl font-bold mb-4">Spiel</h2>
+    <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-game-background">
+      <div class="modal-game-content">
+        <h2 class="text-xl font-bold mb-4">Spiel</h2>
 
-      <div class="flex space-x-4 mb-4">
-        <!-- Dropdown Team -->
-        <div>
-          <label class="block text-sm font-medium mb-1">Team</label>
-          <select id="selectTeam" class="border rounded w-40 p-2">
-            <option value="">Bitte wählen</option>
-            <option value="TheDeers I">TheDeers I</option>
-            <option value="TheDeers II">TheDeers II</option>
-            <option value="TheDeers III">TheDeers III</option>
-            <option value="TheDeers IV">TheDeers IV</option>
-          </select>
+        <div class="flex space-x-4 mb-4">
+          <!-- Dropdown Team -->
+          <div>
+            <label class="block text-sm font-medium mb-1">Team</label>
+            <select id="selectTeam" class="border rounded w-40 p-2">
+              <option value="">Bitte wählen</option>
+              <option value="TheDeers I">TheDeers I</option>
+              <option value="TheDeers II">TheDeers II</option>
+              <option value="TheDeers III">TheDeers III</option>
+              <option value="TheDeers IV">TheDeers IV</option>
+            </select>
+          </div>
+
+          <!-- Gegner -->
+          <div>
+            <label class="block text-sm font-medium mb-1">Gegner</label>
+            <input type="text" id="inputOpponent" class="border rounded w-40 p-2" />
+          </div>
+
+          <!-- Datum -->
+          <div>
+            <label class="block text-sm font-medium mb-1">Datum</label>
+            <input type="date" id="inputDate" class="border rounded w-40 p-2" />
+          </div>
         </div>
 
-        <!-- Gegner -->
-        <div>
-          <label class="block text-sm font-medium mb-1">Gegner</label>
-          <input type="text" id="inputOpponent" class="border rounded w-40 p-2" />
-        </div>
+        <!-- Tabelle Gäste -->
+        <table class="w-full text-sm mb-4 bg-white bg-opacity-90" id="tab_Gaeste">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2 border">Name</th>
+              <th class="p-2 border">Getränke</th>
+              <th class="p-2 border">Essen</th>
+              <th class="p-2 border">Gesamtbetrag</th>
+              <th class="p-2 border">Abrechnung</th>
+              <th class="p-2 border">Aktion</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Zeilen werden dynamisch hinzugefügt -->
+          </tbody>
+        </table>
+        <button id="addGuestRow" class="text-blue-600 mb-4 hover:text-blue-800">+ Gast hinzufügen</button>
 
-        <!-- Datum -->
-        <div>
-          <label class="block text-sm font-medium mb-1">Datum</label>
-          <input type="date" id="inputDate" class="border rounded w-40 p-2" />
+        <!-- Spiel abrechnen, Speichern & Schließen -->
+        <div class="flex justify-end space-x-2">
+          <button id="btnFinalizeGame" class="bg-gray-400 cursor-not-allowed text-white px-4 py-2 rounded" disabled>Spiel abrechnen</button>
+          <button id="btnSaveGame" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+          <button id="btnCloseGame" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
         </div>
       </div>
-
-      <!-- Tabelle Gäste -->
-      <table class="w-full text-sm mb-4" id="tab_Gaeste">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="p-2 border">Name</th>
-            <th class="p-2 border">Getränke</th>
-            <th class="p-2 border">Essen</th>
-            <th class="p-2 border">Gesamtbetrag</th>
-            <th class="p-2 border">Abrechnung</th>
-            <th class="p-2 border">Aktion</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Zeilen werden dynamisch hinzugefügt -->
-        </tbody>
-      </table>
-      <button id="addGuestRow" class="text-blue-600 mb-4 hover:text-blue-800">+ Gast hinzufügen</button>
-
-      <!-- Spiel abrechnen, Speichern & Schließen -->
-      <div class="flex justify-end space-x-2">
-        <button id="btnFinalizeGame" class="bg-gray-400 cursor-not-allowed text-white px-4 py-2 rounded" disabled>Spiel abrechnen</button>
-        <button id="btnSaveGame" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
-        <button id="btnCloseGame" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
-      </div>
-
     </div>
   </div>
 
@@ -369,20 +396,20 @@ function addGuestRow() {
   const tbody = document.querySelector('#tab_Gaeste tbody');
   const row = document.createElement('tr');
   row.innerHTML = `
-    <td class="border p-2">
+    <td class="border p-2 bg-white bg-opacity-90">
       <input type="text" class="border rounded w-full p-1" placeholder="Name" />
     </td>
-    <td class="border p-2">
+    <td class="border p-2 bg-white bg-opacity-90">
       <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddGetraenke hover:bg-blue-600">+ Hinzufügen</button>
     </td>
-    <td class="border p-2">
+    <td class="border p-2 bg-white bg-opacity-90">
       <button class="bg-blue-500 text-white px-2 py-1 rounded btnAddEssen hover:bg-blue-600">+ Hinzufügen</button>
     </td>
-    <td class="border p-2 summeGesamt text-right">0.00 €</td>
-    <td class="border p-2">
+    <td class="border p-2 summeGesamt text-right bg-white bg-opacity-90">0.00 €</td>
+    <td class="border p-2 bg-white bg-opacity-90">
       <button class="bg-gray-500 text-white px-2 py-1 rounded btnAbrechnen hover:bg-gray-600">Abrechnen</button>
     </td>
-    <td class="border p-2 text-center">
+    <td class="border p-2 text-center bg-white bg-opacity-90">
       <button class="bg-red-600 text-white px-2 py-1 rounded btnDeleteGuest hover:bg-red-700">X</button>
     </td>
   `;
@@ -582,18 +609,6 @@ function openAbrechnungModal(row) {
     const getraenkeData = JSON.parse(gespeicherteGetraenke);
     if (Object.keys(getraenkeData).length === 0) {
       getraenkeHtml += '<p class="text-gray-500">Keine Getränke gewählt.</p>';
-    } else {
-      getraenkeHtml += '<ul class="list-disc ml-5">';
-      for (const nameGetr in getraenkeData) {
-        const menge = getraenkeData[nameGetr];
-        const getraenk = getraenkeListe.find(g => g.name === nameGetr);
-        const preis = getraenk ? getraenk.preis : 0;
-        getraenkeHtml += `<li>${nameGetr}: ${menge} × ${preis.toFixed(2)} € = ${(menge * preis).toFixed(2)} €</li>`;
-      }
-      getraenkeHtml += '</ul>';
-    }
-  } else {
-    getraenkeHtml += '<p class="text-gray-500">Keine Getränke gewählt.</p>';
   }
 
   // Essen laden
