@@ -1343,7 +1343,7 @@ document.querySelectorAll('.fixed').forEach(modal => {
 </div>
 
 <script>
-// Erweiterte loadReports Funktion
+// Erweiterte loadReports Funktion (GEFIXT)
 async function loadReports() {
   console.log('loadReports aufgerufen');
   
@@ -1505,11 +1505,30 @@ function fillYearFilter(years) {
   });
 }
 
-// Tabelle rendern
+// Tabelle rendern (GEFIXT)
 function renderReportsTable(weeklyData) {
+  console.log('renderReportsTable aufgerufen mit:', weeklyData);
+  
   const tbody = document.getElementById('auswertungTableBody');
   const noDataMsg = document.getElementById('noDataMessage');
+  const table = document.getElementById('reportsTable');
   const selectedYear = document.getElementById('filterYear').value;
+
+  // Überprüfe ob die Elemente existieren
+  if (!tbody) {
+    console.error('auswertungTableBody Element nicht gefunden!');
+    return;
+  }
+  
+  if (!noDataMsg) {
+    console.error('noDataMessage Element nicht gefunden!');
+    return;
+  }
+  
+  if (!table) {
+    console.error('reportsTable Element nicht gefunden!');
+    return;
+  }
 
   // Filtern nach Jahr wenn ausgewählt
   let filteredData = weeklyData;
@@ -1522,20 +1541,25 @@ function renderReportsTable(weeklyData) {
     }
   }
 
+  console.log('Gefilterte Daten:', filteredData);
   tbody.innerHTML = '';
 
   if (Object.keys(filteredData).length === 0) {
+    console.log('Keine Daten vorhanden, zeige "Keine Daten" Nachricht');
     noDataMsg.classList.remove('hidden');
-    document.getElementById('reportsTable').classList.add('hidden');
+    table.classList.add('hidden');
     return;
   }
 
+  console.log('Zeige Tabelle an');
   noDataMsg.classList.add('hidden');
-  document.getElementById('reportsTable').classList.remove('hidden');
+  table.classList.remove('hidden');
 
   // Nach Datum sortieren (neueste zuerst)
   const sortedEntries = Object.entries(filteredData)
     .sort(([,a], [,b]) => b.sortDate - a.sortDate);
+
+  console.log('Sortierte Einträge:', sortedEntries);
 
   let totalSpiele = 0;
   let totalGetraenke = 0;
@@ -1550,10 +1574,13 @@ function renderReportsTable(weeklyData) {
     totalEssen += data.essenUmsatz;
     totalTrinkgeld += data.trinkgeld;
 
-    // Spiele-String für Anzeige
-    const spieleText = data.spiele.map(spiel => 
-      `${spiel.team} vs ${spiel.opponent}`
-    ).join(', ');
+    console.log(`Erstelle Zeile für ${weekKey}:`, {
+      spiele: data.spiele.length,
+      getraenke: data.getraenkeUmsatz,
+      essen: data.essenUmsatz,
+      trinkgeld: data.trinkgeld,
+      gesamt: gesamtumsatz
+    });
 
     const row = document.createElement('tr');
     row.className = 'hover:bg-gray-50';
@@ -1573,15 +1600,30 @@ function renderReportsTable(weeklyData) {
     tbody.appendChild(row);
   });
 
+  console.log('Alle Zeilen erstellt, Gesamtsummen:', {
+    totalSpiele,
+    totalGetraenke,
+    totalEssen,
+    totalTrinkgeld
+  });
+
   // Gesamtsummen aktualisieren
-  document.getElementById('totalSpiele').textContent = totalSpiele;
-  document.getElementById('totalGetraenke').textContent = `${totalGetraenke.toFixed(2)} €`;
-  document.getElementById('totalEssen').textContent = `${totalEssen.toFixed(2)} €`;
-  document.getElementById('totalTrinkgeld').textContent = `${totalTrinkgeld.toFixed(2)} €`;
-  document.getElementById('totalSumme').textContent = `${(totalGetraenke + totalEssen + totalTrinkgeld).toFixed(2)} €`;
+  const totalSpieleEl = document.getElementById('totalSpiele');
+  const totalGetraenkeEl = document.getElementById('totalGetraenke');
+  const totalEssenEl = document.getElementById('totalEssen');
+  const totalTrinkgeldEl = document.getElementById('totalTrinkgeld');
+  const totalSummeEl = document.getElementById('totalSumme');
+  
+  if (totalSpieleEl) totalSpieleEl.textContent = totalSpiele;
+  if (totalGetraenkeEl) totalGetraenkeEl.textContent = `${totalGetraenke.toFixed(2)} €`;
+  if (totalEssenEl) totalEssenEl.textContent = `${totalEssen.toFixed(2)} €`;
+  if (totalTrinkgeldEl) totalTrinkgeldEl.textContent = `${totalTrinkgeld.toFixed(2)} €`;
+  if (totalSummeEl) totalSummeEl.textContent = `${(totalGetraenke + totalEssen + totalTrinkgeld).toFixed(2)} €`;
 
   // Daten global speichern für Details-Modal
   window.reportData = weeklyData;
+  
+  console.log('renderReportsTable abgeschlossen');
 }
 
 // Wochendetails anzeigen
@@ -1713,37 +1755,71 @@ window.loadReports = loadReports;
 </script>
 
 <script>
+// Gefixte showPage Funktion
 function showPage(page) {
   console.log('Zeige Seite:', page);
   
   // Alle Seiten verstecken
-  document.getElementById('page-home').classList.add('hidden');
-  document.getElementById('page-reports').classList.add('hidden');
+  const homePage = document.getElementById('page-home');
+  const reportsPage = document.getElementById('page-reports');
+  
+  if (!homePage || !reportsPage) {
+    console.error('Seitenelemente nicht gefunden!');
+    return;
+  }
+  
+  homePage.classList.add('hidden');
+  reportsPage.classList.add('hidden');
   
   // Aktuelle Seite anzeigen
-  document.getElementById('page-' + page).classList.remove('hidden');
+  const currentPage = document.getElementById('page-' + page);
+  if (currentPage) {
+    currentPage.classList.remove('hidden');
+  } else {
+    console.error(`Seite page-${page} nicht gefunden!`);
+    return;
+  }
   
   // Alle Buttons auf inaktiv setzen (hellgrau)
   document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.classList.remove('bg-gray-400', 'text-white');
-    btn.classList.add('bg-gray-300', 'text-white', 'rounded', 'px-5', 'py-3.5');
+    btn.classList.remove('bg-gray-400');
+    btn.classList.add('bg-gray-300');
   });
   
   // Nur den aktiven Button hervorheben (dunkelgrau)
   const activeBtn = document.getElementById('btn-' + page);
   if (activeBtn) {
-    activeBtn.classList.remove('bg-gray-300', 'text-white');
-    activeBtn.classList.add('bg-gray-400', 'text-white');
+    activeBtn.classList.remove('bg-gray-300');
+    activeBtn.classList.add('bg-gray-400');
   }
   
   // Berichte laden, wenn reports aktiv ist
   if (page === 'reports') {
     console.log('Wechsle zu Reports-Seite, lade Daten...');
-    // Kurz warten dann loadReports aufrufen
+    
+    // Überprüfe ob die Tabellen-Elemente existieren bevor loadReports aufgerufen wird
     setTimeout(() => {
-      console.log('Timeout erreicht, rufe loadReports auf');
-      loadReports();
-    }, 100);
+      console.log('Prüfe Tabellen-Elemente...');
+      checkElements();
+      
+      // Warte zusätzlich auf Firebase
+      if (window.firebaseReady) {
+        console.log('Firebase bereit, rufe loadReports auf');
+        loadReports();
+      } else {
+        console.log('Warte auf Firebase...');
+        window.addEventListener('firebaseReady', () => {
+          console.log('Firebase Ready Event empfangen, rufe loadReports auf');
+          loadReports();
+        }, { once: true });
+        
+        // Fallback nach 3 Sekunden
+        setTimeout(() => {
+          console.log('Fallback: rufe loadReports nach 3s auf');
+          loadReports();
+        }, 3000);
+      }
+    }, 200);
   }
 }
 
@@ -1771,7 +1847,49 @@ function checkElements() {
 window.checkElements = checkElements;
 
 
+// Erweiterte Debug-Funktion - füge das zum bestehenden Script hinzu
+function debugFullReports() {
+  console.log('=== VOLLSTÄNDIGER REPORTS DEBUG ===');
+  
+  // 1. Prüfe DOM-Elemente
+  console.log('1. DOM-Elemente Check:');
+  checkElements();
+  
+  // 2. Prüfe Firebase Status  
+  console.log('2. Firebase Status:');
+  console.log('Firebase Ready:', window.firebaseReady);
+  console.log('Firebase DB:', window.firebaseDB);
+  console.log('Firebase Utils:', window.firebaseUtils);
+  
+  // 3. Prüfe aktuelle Seite
+  console.log('3. Aktuelle Seite:');
+  const reportsPage = document.getElementById('page-reports');
+  console.log('Reports Page Element:', reportsPage);
+  console.log('Reports Page Hidden:', reportsPage ? reportsPage.classList.contains('hidden') : 'Element nicht gefunden');
+  
+  // 4. Manueller loadReports Test
+  console.log('4. Manueller loadReports Test:');
+  if (window.firebaseReady && window.firebaseDB) {
+    console.log('Firebase verfügbar, teste loadReports...');
+    loadReports().then(() => {
+      console.log('loadReports abgeschlossen');
+    }).catch(error => {
+      console.error('loadReports Fehler:', error);
+    });
+  } else {
+    console.log('Firebase nicht verfügbar für Test');
+  }
+  
+  // 5. Prüfe vorhandene Daten
+  console.log('5. Gespeicherte Spiele Check:');
+  console.log('Anzahl gespeicherter Spiele:', gespeicherteSpiele ? gespeicherteSpiele.length : 'Undefined');
+  if (gespeicherteSpiele && gespeicherteSpiele.length > 0) {
+    console.log('Beispielspiel:', gespeicherteSpiele[0]);
+  }
+}
 
+// Global verfügbar machen
+window.debugFullReports = debugFullReports;
 
 
 
