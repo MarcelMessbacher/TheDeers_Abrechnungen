@@ -1433,6 +1433,18 @@ async function loadReports() {
                 }
               }
             }
+
+console.log('Wöchentliche Daten:', weeklyData);
+    console.log('Anzahl Wochen total:', Object.keys(weeklyData).length);
+    
+    // Jahre-Filter befüllen
+    fillYearFilter(Array.from(allYears).sort((a, b) => b - a));
+    
+    // Tabelle rendern
+    console.log('Rufe renderReportsTable auf...');
+    renderReportsTable(weeklyData);
+    console.log('renderReportsTable abgeschlossen');		
+		
           } catch (e) {
             console.warn('Fehler beim Parsen der Getränke-Daten:', e);
           }
@@ -1466,11 +1478,127 @@ async function loadReports() {
 
     console.log('Wöchentliche Daten:', weeklyData);
     
-    // Jahre-Filter befüllen
-    fillYearFilter(Array.from(allYears).sort((a, b) => b - a));
+    // Jahre Filter befüllen
+function fillYearFilter(years) {
+  console.log('Befülle Jahre-Filter mit:', years);
+  const select = document.getElementById('filterYear');
+  if (!select) {
+    console.error('filterYear Element nicht gefunden!');
+    return;
+  }
+  
+  select.innerHTML = '<option value="">Alle Jahre</option>';
+  years.forEach(year => {
+    const option = document.createElement('option');
+    option.value = year;
+    option.textContent = year;
+    select.appendChild(option);
+    console.log(`Jahr ${year} zu Filter hinzugefügt`);
+  });
+}
     
     // Tabelle rendern
-    renderReportsTable(weeklyData);
+function renderReportsTable(weeklyData) {
+  console.log('renderReportsTable aufgerufen mit:', weeklyData);
+  
+  const tbody = document.getElementById('auswertungTableBody');
+  const noDataMsg = document.getElementById('noDataMessage');
+  const reportsTable = document.getElementById('reportsTable');
+  
+  if (!tbody || !noDataMsg || !reportsTable) {
+    console.error('Tabellen-Elemente nicht gefunden!');
+    return;
+  }
+  
+  const selectedYear = document.getElementById('filterYear').value;
+
+  // Filtern nach Jahr wenn ausgewählt
+  let filteredData = weeklyData;
+  if (selectedYear) {
+    filteredData = {};
+    for (const [key, data] of Object.entries(weeklyData)) {
+      if (data.year == selectedYear) {
+        filteredData[key] = data;
+      }
+    }
+  }
+
+  console.log('Gefilterte Daten:', filteredData);
+  console.log('Anzahl Wochen:', Object.keys(filteredData).length);
+
+  tbody.innerHTML = '';
+
+  if (Object.keys(filteredData).length === 0) {
+    console.log('Keine Daten gefunden, zeige Leer-Nachricht');
+    noDataMsg.classList.remove('hidden');
+    reportsTable.classList.add('hidden');
+    return;
+  }
+
+  console.log('Daten gefunden, verstecke Leer-Nachricht und zeige Tabelle');
+  noDataMsg.classList.add('hidden');
+  reportsTable.classList.remove('hidden');
+
+  // Nach Datum sortieren (neueste zuerst)
+  const sortedEntries = Object.entries(filteredData)
+    .sort(([,a], [,b]) => b.sortDate - a.sortDate);
+
+  console.log('Sortierte Einträge:', sortedEntries);
+
+  let totalSpiele = 0;
+  let totalGetraenke = 0;
+  let totalEssen = 0;
+  let totalTrinkgeld = 0;
+
+  sortedEntries.forEach(([weekKey, data], index) => {
+    console.log(`Erstelle Zeile ${index + 1} für ${weekKey}:`, data);
+    
+    const gesamtumsatz = data.getraenkeUmsatz + data.essenUmsatz + data.trinkgeld;
+    
+    totalSpiele += data.spiele.length;
+    totalGetraenke += data.getraenkeUmsatz;
+    totalEssen += data.essenUmsatz;
+    totalTrinkgeld += data.trinkgeld;
+
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-gray-50';
+    row.innerHTML = `
+      <td class="p-3 border text-center font-medium">${weekKey}</td>
+      <td class="p-3 border text-center">${data.spiele.length}</td>
+      <td class="p-3 border text-right">${data.getraenkeUmsatz.toFixed(2)} €</td>
+      <td class="p-3 border text-right">${data.essenUmsatz.toFixed(2)} €</td>
+      <td class="p-3 border text-right">${data.trinkgeld.toFixed(2)} €</td>
+      <td class="p-3 border text-right font-semibold">${gesamtumsatz.toFixed(2)} €</td>
+      <td class="p-3 border text-center">
+        <button class="text-blue-600 hover:text-blue-800 underline" onclick="showWeekDetails('${weekKey}')">
+          Details
+        </button>
+      </td>
+    `;
+    tbody.appendChild(row);
+    console.log(`Zeile für ${weekKey} hinzugefügt`);
+  });
+
+  console.log('Alle Zeilen erstellt, aktualisiere Gesamtsummen');
+
+  // Gesamtsummen aktualisieren
+  const totalSpieleEl = document.getElementById('totalSpiele');
+  const totalGetraenkeEl = document.getElementById('totalGetraenke');
+  const totalEssenEl = document.getElementById('totalEssen');
+  const totalTrinkgeldEl = document.getElementById('totalTrinkgeld');
+  const totalSummeEl = document.getElementById('totalSumme');
+  
+  if (totalSpieleEl) totalSpieleEl.textContent = totalSpiele;
+  if (totalGetraenkeEl) totalGetraenkeEl.textContent = `${totalGetraenke.toFixed(2)} €`;
+  if (totalEssenEl) totalEssenEl.textContent = `${totalEssen.toFixed(2)} €`;
+  if (totalTrinkgeldEl) totalTrinkgeldEl.textContent = `${totalTrinkgeld.toFixed(2)} €`;
+  if (totalSummeEl) totalSummeEl.textContent = `${(totalGetraenke + totalEssen + totalTrinkgeld).toFixed(2)} €`;
+
+  // Daten global speichern für Details-Modal
+  window.reportData = weeklyData;
+  
+  console.log('Tabelle vollständig gerendert');
+}
 
   } catch (error) {
     console.error("Fehler beim Laden der Auswertung: ", error);
@@ -1740,10 +1868,34 @@ function showPage(page) {
     console.log('Wechsle zu Reports-Seite, lade Daten...');
     // Kurz warten dann loadReports aufrufen
     setTimeout(() => {
+      console.log('Timeout erreicht, rufe loadReports auf');
       loadReports();
     }, 100);
   }
 }
+
+// Debug-Funktion um zu prüfen ob alle Elemente existieren
+function checkElements() {
+  const elements = [
+    'auswertungTableBody',
+    'noDataMessage', 
+    'reportsTable',
+    'filterYear',
+    'totalSpiele',
+    'totalGetraenke',
+    'totalEssen',
+    'totalTrinkgeld',
+    'totalSumme'
+  ];
+  
+  elements.forEach(id => {
+    const el = document.getElementById(id);
+    console.log(`Element ${id}:`, el ? '✓ gefunden' : '✗ NICHT gefunden');
+  });
+}
+
+// Aufruf der Debug-Funktion beim Seitenwechsel
+window.checkElements = checkElements;
 </script>
 
 </body>
