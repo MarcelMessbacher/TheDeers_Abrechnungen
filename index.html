@@ -1973,6 +1973,218 @@ window.debugReports = function() {
     console.error('Firebase Fehler:', error);
   });
 };
+
+// ERWEITERTE DEBUG-FUNKTIONEN - Füge diese zu deinem Script hinzu
+
+// 1. CSS und Visibility Debug
+function debugTableVisibility() {
+  console.log('=== TABLE VISIBILITY DEBUG ===');
+  
+  const table = document.getElementById('reportsTable');
+  const tbody = document.getElementById('auswertungTableBody');
+  const noDataMsg = document.getElementById('noDataMessage');
+  
+  if (table) {
+    console.log('Table Element:');
+    console.log('- Display:', getComputedStyle(table).display);
+    console.log('- Visibility:', getComputedStyle(table).visibility);
+    console.log('- Opacity:', getComputedStyle(table).opacity);
+    console.log('- Hidden class:', table.classList.contains('hidden'));
+    console.log('- All classes:', table.className);
+    console.log('- Parent element:', table.parentElement);
+    console.log('- Table innerHTML length:', table.innerHTML.length);
+  }
+  
+  if (tbody) {
+    console.log('TBody Element:');
+    console.log('- Children count:', tbody.children.length);
+    console.log('- innerHTML length:', tbody.innerHTML.length);
+    console.log('- First 200 chars of innerHTML:', tbody.innerHTML.substring(0, 200));
+  }
+  
+  if (noDataMsg) {
+    console.log('NoDataMessage Element:');
+    console.log('- Hidden class:', noDataMsg.classList.contains('hidden'));
+    console.log('- Display:', getComputedStyle(noDataMsg).display);
+  }
+}
+
+// 2. Datenstruktur Debug
+function debugReportData() {
+  console.log('=== REPORT DATA DEBUG ===');
+  
+  console.log('Global reportData:', window.reportData);
+  
+  if (window.reportData) {
+    const keys = Object.keys(window.reportData);
+    console.log('Report Data Keys:', keys);
+    
+    keys.forEach(key => {
+      const data = window.reportData[key];
+      console.log(`Data for ${key}:`, {
+        spiele: data.spiele?.length || 0,
+        getraenkeUmsatz: data.getraenkeUmsatz,
+        essenUmsatz: data.essenUmsatz,
+        trinkgeld: data.trinkgeld,
+        year: data.year,
+        week: data.week
+      });
+    });
+  }
+  
+  // Test ob getraenkeListe und essenListe verfügbar sind
+  console.log('GetraenkeListe verfügbar:', typeof getraenkeListe !== 'undefined');
+  console.log('EssenListe verfügbar:', typeof essenListe !== 'undefined');
+  
+  if (typeof getraenkeListe !== 'undefined') {
+    console.log('GetraenkeListe:', getraenkeListe);
+  }
+  
+  if (typeof essenListe !== 'undefined') {
+    console.log('EssenListe:', essenListe);
+  }
+}
+
+// 3. Firebase Daten Debug
+function debugFirebaseData() {
+  console.log('=== FIREBASE DATA DEBUG ===');
+  
+  if (!window.firebaseDB) {
+    console.error('Firebase DB nicht verfügbar');
+    return;
+  }
+  
+  window.firebaseUtils.getDocs(
+    window.firebaseUtils.collection(window.firebaseDB, "spiele")
+  ).then(snapshot => {
+    console.log('Firebase Snapshot Size:', snapshot.size);
+    
+    const allGames = [];
+    snapshot.forEach(doc => {
+      allGames.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    console.log('Alle Firebase Spiele:', allGames);
+    
+    // Teste Datenverarbeitung Schritt für Schritt
+    allGames.forEach(spiel => {
+      console.log(`\n=== Verarbeite Spiel: ${spiel.team} vs ${spiel.opponent} ===`);
+      console.log('Datum:', spiel.date);
+      console.log('Gäste:', spiel.gaeste?.length || 0);
+      
+      if (spiel.gaeste) {
+        spiel.gaeste.forEach((gast, index) => {
+          console.log(`Gast ${index + 1}:`, gast.name);
+          
+          // Teste Getränke Parsing
+          if (gast.getraenke) {
+            try {
+              const getraenkeData = JSON.parse(gast.getraenke);
+              console.log('- Getränke Data:', getraenkeData);
+              
+              for (const [name, menge] of Object.entries(getraenkeData)) {
+                const getraenk = getraenkeListe.find(g => g.name === name);
+                if (getraenk && menge > 0) {
+                  console.log(`  - ${name}: ${menge} x ${getraenk.preis}€ = ${menge * getraenk.preis}€`);
+                }
+              }
+            } catch (e) {
+              console.error('- Getränke Parse Error:', e);
+            }
+          }
+          
+          // Teste Essen Parsing  
+          if (gast.essen) {
+            try {
+              const essenData = JSON.parse(gast.essen);
+              console.log('- Essen Data:', essenData);
+              
+              for (const [name, menge] of Object.entries(essenData)) {
+                const essen = essenListe.find(e => e.name === name);
+                if (essen && menge > 0) {
+                  console.log(`  - ${name}: ${menge} x ${essen.preis}€ = ${menge * essen.preis}€`);
+                }
+              }
+            } catch (e) {
+              console.error('- Essen Parse Error:', e);
+            }
+          }
+          
+          if (gast.tip) {
+            console.log('- Trinkgeld:', gast.tip);
+          }
+        });
+      }
+    });
+    
+  }).catch(error => {
+    console.error('Firebase Error:', error);
+  });
+}
+
+// 4. Manueller Table Render Test
+function debugManualRender() {
+  console.log('=== MANUAL RENDER TEST ===');
+  
+  const tbody = document.getElementById('auswertungTableBody');
+  const table = document.getElementById('reportsTable');
+  const noDataMsg = document.getElementById('noDataMessage');
+  
+  if (!tbody || !table || !noDataMsg) {
+    console.error('Benötigte Elemente nicht gefunden');
+    return;
+  }
+  
+  // Reset
+  tbody.innerHTML = '';
+  table.classList.remove('hidden');
+  noDataMsg.classList.add('hidden');
+  
+  // Test-Daten erstellen
+  console.log('Füge Test-Zeile hinzu...');
+  const testRow = document.createElement('tr');
+  testRow.className = 'hover:bg-gray-50';
+  testRow.innerHTML = `
+    <td class="p-3 border text-center font-medium">KW 1/2024</td>
+    <td class="p-3 border text-center">1</td>
+    <td class="p-3 border text-right">10.50 €</td>
+    <td class="p-3 border text-right">5.00 €</td>
+    <td class="p-3 border text-right">2.00 €</td>
+    <td class="p-3 border text-right font-semibold">17.50 €</td>
+    <td class="p-3 border text-center">
+      <button class="text-blue-600 hover:text-blue-800 underline">Details</button>
+    </td>
+  `;
+  
+  tbody.appendChild(testRow);
+  console.log('Test-Zeile hinzugefügt');
+  console.log('TBody children count nach Test:', tbody.children.length);
+  console.log('Table visible nach Test:', !table.classList.contains('hidden'));
+}
+
+// 5. Kombinierte Debug-Funktion
+function debugCompleteReports() {
+  console.log('=== COMPLETE REPORTS DEBUG ===');
+  debugTableVisibility();
+  debugReportData();
+  debugFirebaseData();
+  
+  // Nach 2 Sekunden nochmal Table Visibility prüfen
+  setTimeout(() => {
+    console.log('\n=== DELAYED TABLE VISIBILITY CHECK ===');
+    debugTableVisibility();
+  }, 2000);
+}
+
+// Global verfügbar machen
+window.debugTableVisibility = debugTableVisibility;
+window.debugReportData = debugReportData;
+window.debugFirebaseData = debugFirebaseData;
+window.debugManualRender = debugManualRender;
+window.debugCompleteReports = debugCompleteReports;
 </script>
 
 </body>
