@@ -63,6 +63,36 @@ window.dispatchEvent(new Event('firebaseReady'));
       position: relative;
       z-index: 2;
     }
+	/* Toast Styles */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #10b981;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-weight: 500;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  max-width: 500px;
+  text-align: center;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+.toast.error {
+  background-color: #ef4444;
+}
+
+.toast.warning {
+  background-color: #f59e0b;
+}
   </style>
 </head>
 <body class="bg-gray-100 p-6">
@@ -216,6 +246,36 @@ window.dispatchEvent(new Event('firebaseReady'));
   </div>
 
 <script>
+
+let confirmCallback = null; // Für Bestätigungsmodal
+
+// Toast-Funktionen
+function showToast(message, type = 'success') {
+  // Entferne existierende Toasts
+  const existingToasts = document.querySelectorAll('.toast');
+  existingToasts.forEach(toast => toast.remove());
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  // Toast anzeigen
+  setTimeout(() => toast.classList.add('show'), 100);
+
+  // Toast nach 3 Sekunden ausblenden
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+function showConfirm(message, callback, confirmText = 'Löschen') {
+  document.getElementById('confirmMessage').textContent = message;
+  document.getElementById('btnConfirmOk').textContent = confirmText;
+  confirmCallback = callback;
+  document.getElementById('modalConfirm').classList.remove('hidden');
+}
 
 let gespeicherteSpiele = [];
 let editIndex = null;
@@ -391,6 +451,20 @@ document.getElementById('btnCloseAbrechnung').addEventListener('click', () => {
 });
 
 document.getElementById('addGuestRow').addEventListener('click', addGuestRow);
+
+// Bestätigungsmodal Event Listeners
+document.getElementById('btnConfirmCancel').addEventListener('click', () => {
+  document.getElementById('modalConfirm').classList.add('hidden');
+  confirmCallback = null;
+});
+
+document.getElementById('btnConfirmOk').addEventListener('click', () => {
+  if (confirmCallback) {
+    confirmCallback();
+    confirmCallback = null;
+  }
+  document.getElementById('modalConfirm').classList.add('hidden');
+});
 
 // Form zurücksetzen
 function clearGameForm() {
@@ -757,7 +831,7 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
   const date = document.getElementById('inputDate').value;
 
   if (!team || !opponent || !date) {
-    alert('Bitte füllen Sie alle Pflichtfelder aus (Team, Gegner, Datum).');
+	showToast('Bitte füllen Sie alle Pflichtfelder aus (Team, Gegner, Datum).', 'error');
     return;
   }
 
@@ -812,7 +886,7 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
   
   // Erfolgs-Nachricht
   const statusText = spielData.status === 'ready' ? 'bereit für Abrechnung' : 'als Entwurf gespeichert';
-  alert(`Spiel wurde ${statusText}!`);
+  showToast(`Spiel wurde ${statusText}!`);
 });
 
 // PDF-Erstellung für Spiel-Abrechnung (Final-Abrechnung)
@@ -822,7 +896,7 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async () =>
   const date = document.getElementById('inputDate').value;
 
   if (!team || !opponent || !date) {
-    alert('Bitte füllen Sie alle Pflichtfelder aus (Team, Gegner, Datum).');
+    showToast('Bitte füllen Sie alle Pflichtfelder aus (Team, Gegner, Datum).');
     return;
   }
 
@@ -995,7 +1069,7 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async () =>
   document.getElementById('modalGame').classList.add('hidden');
   clearGameForm();
   
-  alert('Spiel wurde final abgerechnet und PDF wurde erstellt!');
+  showToast('Spiel wurde final abgerechnet und PDF wurde erstellt!');
 });
 
 // PDF anzeigen Funktion
@@ -1005,7 +1079,7 @@ function showPDF(index) {
     const newWindow = window.open();
     newWindow.document.write(`<iframe src="${spiel.pdfData}" width="100%" height="100%"></iframe>`);
   } else {
-    alert('Für dieses Spiel ist kein PDF verfügbar.');
+    showToast('Für dieses Spiel ist kein PDF verfügbar.', 'warning');
   }
 }
 
@@ -1084,7 +1158,7 @@ function editGame(index) {
   
   // Verhindere Bearbeitung von finalisierten Spielen
   if (spiel.status === 'finalized') {
-    alert('Dieses Spiel ist bereits final abgerechnet und kann nicht mehr bearbeitet werden.');
+    showToast('Dieses Spiel ist bereits final abgerechnet und kann nicht mehr bearbeitet werden.', 'warning');
     return;
   }
   
@@ -1160,11 +1234,11 @@ function deleteGame(index) {
   
   // Verhindere Löschen von finalisierten Spielen
   if (spiel.status === 'finalized') {
-    alert('Finalisierte Spiele können nicht gelöscht werden.');
+    showToast('Finalisierte Spiele können nicht gelöscht werden.', 'warning');
     return;
   }
   
-  if (confirm('Sind Sie sicher, dass Sie dieses Spiel löschen möchten?')) {
+  showConfirm('Sind Sie sicher, dass Sie dieses Spiel löschen möchten?', () => {
     // Aus Firebase löschen wenn Firebase-ID vorhanden
     if (spiel.firebaseId) {
       deleteGameFromFirebase(spiel.firebaseId).then(success => {
@@ -1181,8 +1255,10 @@ function deleteGame(index) {
     renderGames();
     
     // Erfolgs-Nachricht
-    alert('Spiel wurde gelöscht!');
-  }
+    showToast('Spiel wurde gelöscht!');
+  });
+}
+}
 }
 
 // Beim Laden der Seite Firebase-Daten laden
@@ -1666,7 +1742,7 @@ document.getElementById('btnCloseDetails').addEventListener('click', () => {
 // PDF Export
 document.getElementById('btnExportPDF').addEventListener('click', () => {
   if (!window.reportData) {
-    alert('Keine Daten zum Exportieren verfügbar.');
+    showToast('Keine Daten zum Exportieren verfügbar.', 'warning');
     return;
   }
 
@@ -1971,5 +2047,16 @@ window.debugReports = function() {
 };
 </script>
 
+<!-- Modal: Bestätigung -->
+<div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded w-full max-w-md">
+    <h2 class="text-xl font-bold mb-4">Bestätigung erforderlich</h2>
+    <p id="confirmMessage" class="mb-6 text-gray-700"></p>
+    <div class="flex justify-end space-x-2">
+      <button id="btnConfirmCancel" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+      <button id="btnConfirmOk" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Löschen</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
