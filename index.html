@@ -93,9 +93,97 @@ window.dispatchEvent(new Event('firebaseReady'));
 .toast.warning {
   background-color: #f59e0b;
 }
+
+/* Login Styles */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.login-form {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e1e5e9;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.login-button {
+  width: 100%;
+  padding: 12px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.login-button:hover {
+  background: #5a67d8;
+}
+
+.login-button:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+}
+
+.hidden {
+  display: none !important;
+}
   </style>
 </head>
 <body class="bg-gray-100 p-6">
+
+<!-- Login Seite -->
+<div id="loginPage" class="login-container">
+  <div class="login-form">
+    <div class="text-center mb-8">
+      <img src="The Deers Logo A4.svg" alt="Logo" class="h-20 w-auto mx-auto mb-4">
+      <h1 class="text-2xl font-bold text-gray-800">Heimspielabrechnung</h1>
+      <h2 class="text-lg text-gray-600">The Deers - TSV Hirschaid</h2>
+    </div>
+    
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-700">Benutzername</label>
+        <input type="text" id="loginUsername" class="login-input" placeholder="Benutzername eingeben" required>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-700">Passwort</label>
+        <input type="password" id="loginPassword" class="login-input" placeholder="Passwort eingeben" required>
+      </div>
+      
+      <button type="submit" id="loginButton" class="login-button">Anmelden</button>
+      
+      <div id="loginError" class="text-red-600 text-sm text-center hidden mt-2"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Haupt-App (wird nach Login angezeigt) -->
+<div id="mainApp" class="hidden">
 
 <!-- Kopfbereich mit Logo + Titel -->
 <div class="relative mb-8">
@@ -2055,5 +2143,234 @@ window.debugReports = function() {
     </div>
   </div>
 </div>
+</div> <!-- Ende mainApp -->
+
+<script>
+// Login-Funktionalität
+let isLoggedIn = false;
+let currentUser = null;
+
+// Benutzer erstellen (nur für Setup)
+async function createUser(username, password) {
+  try {
+    if (!window.firebaseDB) {
+      console.error('Firebase nicht initialisiert');
+      return false;
+    }
+
+    // Passwort hashen (einfacher Hash - in Produktion sollte bcrypt verwendet werden)
+    const hashedPassword = btoa(password); // Base64 encoding als einfacher Hash
+
+    const userData = {
+      username: username,
+      password: hashedPassword,
+      createdAt: new Date().toISOString(),
+      isActive: true
+    };
+
+    const docRef = await window.firebaseUtils.addDoc(
+      window.firebaseUtils.collection(window.firebaseDB, "users"), 
+      userData
+    );
+    
+    console.log("Benutzer erstellt mit ID: ", docRef.id);
+    return true;
+  } catch (error) {
+    console.error("Fehler beim Erstellen des Benutzers: ", error);
+    return false;
+  }
+}
+
+// Benutzer authentifizieren
+async function authenticateUser(username, password) {
+  try {
+    if (!window.firebaseDB) {
+      console.error('Firebase nicht initialisiert');
+      return false;
+    }
+
+    const querySnapshot = await window.firebaseUtils.getDocs(
+      window.firebaseUtils.collection(window.firebaseDB, "users")
+    );
+
+    const hashedPassword = btoa(password); // Base64 encoding
+
+    let foundUser = null;
+    querySnapshot.forEach((doc) => {
+      const userData = doc.data();
+      if (userData.username === username && 
+          userData.password === hashedPassword && 
+          userData.isActive) {
+        foundUser = { id: doc.id, ...userData };
+      }
+    });
+
+    return foundUser;
+  } catch (error) {
+    console.error("Fehler bei der Authentifizierung: ", error);
+    return false;
+  }
+}
+
+// Login-Event
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const loginButton = document.getElementById('loginButton');
+  const loginError = document.getElementById('loginError');
+  
+  if (!username || !password) {
+    loginError.textContent = 'Bitte füllen Sie alle Felder aus.';
+    loginError.classList.remove('hidden');
+    return;
+  }
+  
+  // Button deaktivieren während Login
+  loginButton.disabled = true;
+  loginButton.textContent = 'Anmelden...';
+  loginError.classList.add('hidden');
+  
+  try {
+    // Warten bis Firebase bereit ist
+    if (!window.firebaseReady) {
+      await new Promise(resolve => {
+        if (window.firebaseReady) {
+          resolve();
+        } else {
+          window.addEventListener('firebaseReady', resolve, { once: true });
+          setTimeout(resolve, 3000); // Fallback timeout
+        }
+      });
+    }
+    
+    const user = await authenticateUser(username, password);
+    
+    if (user) {
+      // Erfolgreicher Login
+      isLoggedIn = true;
+      currentUser = user;
+      
+      // Session speichern (optional)
+      sessionStorage.setItem('isLoggedIn', 'true');
+      sessionStorage.setItem('currentUser', JSON.stringify(user));
+      
+      // UI wechseln
+      document.getElementById('loginPage').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
+      
+      // Bestehende Daten laden
+      await loadGamesFromFirebase();
+      
+      showToast('Erfolgreich angemeldet!');
+    } else {
+      // Login fehlgeschlagen
+      loginError.textContent = 'Ungültiger Benutzername oder Passwort.';
+      loginError.classList.remove('hidden');
+    }
+  } catch (error) {
+    console.error('Login-Fehler:', error);
+    loginError.textContent = 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';
+    loginError.classList.remove('hidden');
+  } finally {
+    // Button wieder aktivieren
+    loginButton.disabled = false;
+    loginButton.textContent = 'Anmelden';
+  }
+});
+
+// Session-Check beim Laden der Seite
+function checkExistingSession() {
+  const savedLogin = sessionStorage.getItem('isLoggedIn');
+  const savedUser = sessionStorage.getItem('currentUser');
+  
+  if (savedLogin === 'true' && savedUser) {
+    isLoggedIn = true;
+    currentUser = JSON.parse(savedUser);
+    
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    
+    // Bestehende Daten laden
+    if (window.firebaseReady) {
+      loadGamesFromFirebase();
+    }
+  }
+}
+
+// Logout-Funktion
+function logout() {
+  isLoggedIn = false;
+  currentUser = null;
+  
+  sessionStorage.removeItem('isLoggedIn');
+  sessionStorage.removeItem('currentUser');
+  
+  document.getElementById('loginPage').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  
+  // Login-Form zurücksetzen
+  document.getElementById('loginForm').reset();
+  document.getElementById('loginError').classList.add('hidden');
+  
+  showToast('Erfolgreich abgemeldet.');
+}
+
+// Benutzer-Setup-Funktion (für initiale Einrichtung)
+async function setupUser() {
+  console.log('=== BENUTZER SETUP ===');
+  console.log('Verwenden Sie diese Funktion in der Browser-Konsole, um einen Benutzer zu erstellen:');
+  console.log('await createUser("admin", "deers2024")');
+  
+  // Automatisch ersten Admin-Benutzer erstellen (kann später entfernt werden)
+  if (window.firebaseReady) {
+    const success = await createUser("admin", "deers2024");
+    if (success) {
+      console.log('✅ Standard-Benutzer erstellt:');
+      console.log('Benutzername: admin');
+      console.log('Passwort: deers2024');
+      console.log('WICHTIG: Ändern Sie das Passwort nach dem ersten Login!');
+    }
+  } else {
+    console.log('⏳ Warten auf Firebase...');
+    window.addEventListener('firebaseReady', async () => {
+      const success = await createUser("admin", "deers2024");
+      if (success) {
+        console.log('✅ Standard-Benutzer erstellt:');
+        console.log('Benutzername: admin');
+        console.log('Passwort: deers2024');
+      }
+    });
+  }
+}
+
+// Global verfügbare Funktionen
+window.createUser = createUser;
+window.logout = logout;
+window.setupUser = setupUser;
+
+// Session-Check beim Laden der Seite
+window.addEventListener('load', () => {
+  checkExistingSession();
+  
+  // Setup-Funktion nach kurzer Verzögerung ausführen
+  setTimeout(setupUser, 2000);
+});
+
+// Logout-Button zur Navigation hinzufügen
+document.addEventListener('DOMContentLoaded', () => {
+  const nav = document.querySelector('nav');
+  if (nav) {
+    const logoutBtn = document.createElement('button');
+    logoutBtn.textContent = 'Abmelden';
+    logoutBtn.className = 'bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 font-bold';
+    logoutBtn.style.width = '150px';
+    logoutBtn.onclick = logout;
+    nav.appendChild(logoutBtn);
+  }
+});
+</script>
+
 </body>
 </html>
