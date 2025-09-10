@@ -100,7 +100,29 @@ window.dispatchEvent(new Event('firebaseReady'));
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f7f8f9;
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      #e5e7eb 2px,
+      #e5e7eb 4px
+    ),
+    repeating-linear-gradient(
+      60deg,
+      transparent,
+      transparent 2px,
+      #e5e7eb 2px,
+      #e5e7eb 4px
+    ),
+    repeating-linear-gradient(
+      120deg,
+      transparent,
+      transparent 2px,
+      #e5e7eb 2px,
+      #e5e7eb 4px
+    );
 }
 
 .login-form {
@@ -2151,35 +2173,35 @@ let isLoggedIn = false;
 let currentUser = null;
 
 // Benutzer erstellen (nur für Setup)
-async function createUser(username, password) {
-  try {
-    if (!window.firebaseDB) {
-      console.error('Firebase nicht initialisiert');
-      return false;
-    }
+<!-- async function createUser(username, password) { -->
+  <!-- try { -->
+    <!-- if (!window.firebaseDB) { -->
+      <!-- console.error('Firebase nicht initialisiert'); -->
+      <!-- return false; -->
+    <!-- } -->
 
-    // Passwort hashen (einfacher Hash - in Produktion sollte bcrypt verwendet werden)
-    const hashedPassword = btoa(password); // Base64 encoding als einfacher Hash
+    <!-- // Passwort hashen (einfacher Hash - in Produktion sollte bcrypt verwendet werden) -->
+    <!-- const hashedPassword = btoa(password); // Base64 encoding als einfacher Hash -->
 
-    const userData = {
-      username: username,
-      password: hashedPassword,
-      createdAt: new Date().toISOString(),
-      isActive: true
-    };
+    <!-- const userData = { -->
+      <!-- username: username, -->
+      <!-- password: hashedPassword, -->
+      <!-- createdAt: new Date().toISOString(), -->
+      <!-- isActive: true -->
+    <!-- }; -->
 
-    const docRef = await window.firebaseUtils.addDoc(
-      window.firebaseUtils.collection(window.firebaseDB, "users"), 
-      userData
-    );
+    <!-- const docRef = await window.firebaseUtils.addDoc( -->
+      <!-- window.firebaseUtils.collection(window.firebaseDB, "users"),  -->
+      <!-- userData -->
+    <!-- ); -->
     
-    console.log("Benutzer erstellt mit ID: ", docRef.id);
-    return true;
-  } catch (error) {
-    console.error("Fehler beim Erstellen des Benutzers: ", error);
-    return false;
-  }
-}
+    <!-- console.log("Benutzer erstellt mit ID: ", docRef.id); -->
+    <!-- return true; -->
+  <!-- } catch (error) { -->
+    <!-- console.error("Fehler beim Erstellen des Benutzers: ", error); -->
+    <!-- return false; -->
+  <!-- } -->
+<!-- } -->
 
 // Benutzer authentifizieren
 async function authenticateUser(username, password) {
