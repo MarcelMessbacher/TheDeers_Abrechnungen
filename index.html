@@ -14,6 +14,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+	import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     // Firebase Konfiguration
     const firebaseConfig = {
@@ -29,11 +30,28 @@
     // Firebase initialisieren
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+	const auth = getAuth(app);
 
 // Firebase Funktionen global verfügbar machen
 window.firebaseDB = db;
+window.firebaseAuth = auth;
 window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
+window.authUtils = { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut };
 window.firebaseReady = true;
+
+onAuthStateChanged(auth, (user) => {
+  console.log('Auth state changed:', user ? 'Benutzer angemeldet' : 'Benutzer abgemeldet');
+  window.currentFirebaseUser = user;
+  
+  if (user) {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    loadGamesFromFirebase();
+  } else {
+    document.getElementById('loginPage').classList.remove('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+  }
+});
 
 // Event für Firebase-Initialisierung
 window.dispatchEvent(new Event('firebaseReady'));
@@ -188,8 +206,8 @@ window.dispatchEvent(new Event('firebaseReady'));
     
     <form id="loginForm" class="space-y-4">
       <div>
-        <label class="block text-sm font-medium mb-2 text-gray-700">Benutzername</label>
-        <input type="text" id="loginUsername" class="login-input" placeholder="Benutzername eingeben" required>
+        <label class="block text-sm font-medium mb-2 text-gray-700">E-Mail</label>
+        <input type="email" id="loginEmail" class="login-input" placeholder="E-Mail eingeben" required>
       </div>
       
       <div>
@@ -201,6 +219,14 @@ window.dispatchEvent(new Event('firebaseReady'));
       
       <div id="loginError" class="text-red-600 text-sm text-center hidden mt-2"></div>
     </form>
+	
+	<!-- Setup Button (nur für Ersteinrichtung) -->
+    <div class="mt-4 text-center">
+      <button id="setupButton" class="text-sm text-blue-600 hover:text-blue-800 underline">
+        Erste Einrichtung (Admin-Account erstellen)
+      </button>
+    </div>
+	
   </div>
 </div>
 
@@ -2204,50 +2230,102 @@ let currentUser = null;
 <!-- } -->
 
 // Benutzer authentifizieren
-async function authenticateUser(username, password) {
-  try {
-    if (!window.firebaseDB) {
-      console.error('Firebase nicht initialisiert');
-      return false;
+async function authenticateUser(email, password) {
+      try {
+        if (!window.firebaseAuth) {
+          console.error('Firebase Auth nicht initialisiert');
+          return false;
+        }
+
+        const userCredential = await window.authUtils.signInWithEmailAndPassword(
+          window.firebaseAuth, 
+          email, 
+          password
+        );
+        
+        console.log('Benutzer erfolgreich angemeldet:', userCredential.user);
+        return userCredential.user;
+      } catch (error) {
+        console.error("Fehler bei der Authentifizierung: ", error);
+        
+        // Benutzerfreundliche Fehlermeldungen
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+          throw new Error('Ungültige E-Mail oder Passwort');
+        } else if (error.code === 'auth/invalid-email') {
+          throw new Error('Ungültige E-Mail-Adresse');
+        } else {
+          throw new Error('Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+        }
+      }
+    }
+	
+	// Benutzer erstellen (für Setup)
+    async function createUser(email, password) {
+      try {
+        if (!window.firebaseAuth) {
+          console.error('Firebase Auth nicht initialisiert');
+          return false;
+        }
+
+        const userCredential = await window.authUtils.createUserWithEmailAndPassword(
+          window.firebaseAuth, 
+          email, 
+          password
+        );
+        
+        // Zusätzlich Benutzer-Dokument in Firestore erstellen
+        const userData = {
+          email: email,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          role: 'admin'
+        };
+
+        await window.firebaseUtils.addDoc(
+          window.firebaseUtils.collection(window.firebaseDB, "users"), 
+          { ...userData, uid: userCredential.user.uid }
+        );
+
+        console.log("Admin-Benutzer erstellt:", userCredential.user);
+        return userCredential.user;
+      } catch (error) {
+        console.error("Fehler beim Erstellen des Benutzers: ", error);
+        
+        if (error.code === 'auth/email-already-in-use') {
+          throw new Error('Diese E-Mail-Adresse wird bereits verwendet');
+        } else if (error.code === 'auth/weak-password') {
+          throw new Error('Das Passwort ist zu schwach');
+        } else {
+          throw new Error('Account-Erstellung fehlgeschlagen');
+        }
+      }
     }
 
-    const querySnapshot = await window.firebaseUtils.getDocs(
-      window.firebaseUtils.collection(window.firebaseDB, "users")
-    );
-
-    const hashedPassword = btoa(password); // Base64 encoding
-
-    let foundUser = null;
-    querySnapshot.forEach((doc) => {
-      const userData = doc.data();
-      if (userData.username === username && 
-          userData.password === hashedPassword && 
-          userData.isActive) {
-        foundUser = { id: doc.id, ...userData };
+    // Logout-Funktion
+    async function logout() {
+      try {
+        await window.authUtils.signOut(window.firebaseAuth);
+        showToast('Erfolgreich abgemeldet.');
+      } catch (error) {
+        console.error('Logout-Fehler:', error);
+        showToast('Fehler beim Abmelden.', 'error');
       }
-    });
-
-    return foundUser;
-  } catch (error) {
-    console.error("Fehler bei der Authentifizierung: ", error);
-    return false;
-  }
-}
+    }
 
 // Login-Event
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const username = document.getElementById('loginUsername').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const loginButton = document.getElementById('loginButton');
-  const loginError = document.getElementById('loginError');
-  
-  if (!username || !password) {
-    loginError.textContent = 'Bitte füllen Sie alle Felder aus.';
-    loginError.classList.remove('hidden');
-    return;
-  }
+      e.preventDefault();
+      
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const loginButton = document.getElementById('loginButton');
+      const loginError = document.getElementById('loginError');
+      
+      if (!email || !password) {
+        loginError.textContent = 'Bitte füllen Sie alle Felder aus.';
+        loginError.classList.remove('hidden');
+        return;
+      }
   
   // Button deaktivieren während Login
   loginButton.disabled = true;
@@ -2267,7 +2345,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       });
     }
     
-    const user = await authenticateUser(username, password);
+    const user = await authenticateUser(email, password);
     
     if (user) {
       // Erfolgreicher Login
@@ -2288,7 +2366,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       showToast('Erfolgreich angemeldet!');
     } else {
       // Login fehlgeschlagen
-      loginError.textContent = 'Ungültiger Benutzername oder Passwort.';
+      loginError.textContent = 'Ungültige E-Mail oder Passwort.';
       loginError.classList.remove('hidden');
     }
   } catch (error) {
@@ -2301,6 +2379,32 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     loginButton.textContent = 'Anmelden';
   }
 });
+
+    // Setup-Button Event
+    document.getElementById('setupButton').addEventListener('click', async () => {
+      const email = prompt('Admin E-Mail-Adresse eingeben:');
+      const password = prompt('Admin Passwort eingeben (mindestens 6 Zeichen):');
+      
+      if (!email || !password) {
+        showToast('Setup abgebrochen.', 'warning');
+        return;
+      }
+      
+      if (password.length < 6) {
+        showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'error');
+        return;
+      }
+      
+      try {
+        await createUser(email, password);
+        showToast('Admin-Account erfolgreich erstellt! Sie können sich jetzt anmelden.');
+        
+        // Setup-Button ausblenden nach erfolgreichem Setup
+        document.getElementById('setupButton').style.display = 'none';
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
 
 // Session-Check beim Laden der Seite
 function checkExistingSession() {
@@ -2350,7 +2454,7 @@ async function setupUser() {
     const success = await createUser("admin", "deers2024");
     if (success) {
       console.log('✅ Standard-Benutzer erstellt:');
-      console.log('Benutzername: admin');
+      console.log('E-Mail: admin');
       console.log('Passwort: deers2024');
       console.log('WICHTIG: Ändern Sie das Passwort nach dem ersten Login!');
     }
@@ -2360,7 +2464,7 @@ async function setupUser() {
       const success = await createUser("admin", "deers2024");
       if (success) {
         console.log('✅ Standard-Benutzer erstellt:');
-        console.log('Benutzername: admin');
+        console.log('E-Mail: admin');
         console.log('Passwort: deers2024');
       }
     });
