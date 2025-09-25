@@ -221,11 +221,11 @@ window.dispatchEvent(new Event('firebaseReady'));
     </form>
 	
 	<!-- Setup Button (nur für Ersteinrichtung) -->
-    <div class="mt-4 text-center">
-      <button id="setupButton" class="text-sm text-blue-600 hover:text-blue-800 underline">
-        Erste Einrichtung (Admin-Account erstellen)
-      </button>
-    </div>
+    <!-- <div class="mt-4 text-center"> -->
+      <!-- <button id="setupButton" class="text-sm text-blue-600 hover:text-blue-800 underline"> -->
+        <!-- Erste Einrichtung (Admin-Account erstellen) -->
+      <!-- </button> -->
+    <!-- </div> -->
 	
   </div>
 </div>
@@ -2198,36 +2198,6 @@ window.debugReports = function() {
 let isLoggedIn = false;
 let currentUser = null;
 
-// Benutzer erstellen (nur für Setup)
-<!-- async function createUser(username, password) { -->
-  <!-- try { -->
-    <!-- if (!window.firebaseDB) { -->
-      <!-- console.error('Firebase nicht initialisiert'); -->
-      <!-- return false; -->
-    <!-- } -->
-
-    <!-- // Passwort hashen (einfacher Hash - in Produktion sollte bcrypt verwendet werden) -->
-    <!-- const hashedPassword = btoa(password); // Base64 encoding als einfacher Hash -->
-
-    <!-- const userData = { -->
-      <!-- username: username, -->
-      <!-- password: hashedPassword, -->
-      <!-- createdAt: new Date().toISOString(), -->
-      <!-- isActive: true -->
-    <!-- }; -->
-
-    <!-- const docRef = await window.firebaseUtils.addDoc( -->
-      <!-- window.firebaseUtils.collection(window.firebaseDB, "users"),  -->
-      <!-- userData -->
-    <!-- ); -->
-    
-    <!-- console.log("Benutzer erstellt mit ID: ", docRef.id); -->
-    <!-- return true; -->
-  <!-- } catch (error) { -->
-    <!-- console.error("Fehler beim Erstellen des Benutzers: ", error); -->
-    <!-- return false; -->
-  <!-- } -->
-<!-- } -->
 
 // Benutzer authentifizieren
 async function authenticateUser(email, password) {
@@ -2260,46 +2230,46 @@ async function authenticateUser(email, password) {
     }
 	
 	// Benutzer erstellen (für Setup)
-    async function createUser(email, password) {
-      try {
-        if (!window.firebaseAuth) {
-          console.error('Firebase Auth nicht initialisiert');
-          return false;
-        }
+    <!-- async function createUser(email, password) { -->
+      <!-- try { -->
+        <!-- if (!window.firebaseAuth) { -->
+          <!-- console.error('Firebase Auth nicht initialisiert'); -->
+          <!-- return false; -->
+        <!-- } -->
 
-        const userCredential = await window.authUtils.createUserWithEmailAndPassword(
-          window.firebaseAuth, 
-          email, 
-          password
-        );
+        <!-- const userCredential = await window.authUtils.createUserWithEmailAndPassword( -->
+          <!-- window.firebaseAuth,  -->
+          <!-- email,  -->
+          <!-- password -->
+        <!-- ); -->
         
-        // Zusätzlich Benutzer-Dokument in Firestore erstellen
-        const userData = {
-          email: email,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          role: 'admin'
-        };
+        <!-- // Zusätzlich Benutzer-Dokument in Firestore erstellen -->
+        <!-- const userData = { -->
+          <!-- email: email, -->
+          <!-- isActive: true, -->
+          <!-- createdAt: new Date().toISOString(), -->
+          <!-- role: 'admin' -->
+        <!-- }; -->
 
-        await window.firebaseUtils.addDoc(
-          window.firebaseUtils.collection(window.firebaseDB, "users"), 
-          { ...userData, uid: userCredential.user.uid }
-        );
+        <!-- await window.firebaseUtils.addDoc( -->
+          <!-- window.firebaseUtils.collection(window.firebaseDB, "users"),  -->
+          <!-- { ...userData, uid: userCredential.user.uid } -->
+        <!-- ); -->
 
-        console.log("Admin-Benutzer erstellt:", userCredential.user);
-        return userCredential.user;
-      } catch (error) {
-        console.error("Fehler beim Erstellen des Benutzers: ", error);
+        <!-- console.log("Admin-Benutzer erstellt:", userCredential.user); -->
+        <!-- return userCredential.user; -->
+      <!-- } catch (error) { -->
+        <!-- console.error("Fehler beim Erstellen des Benutzers: ", error); -->
         
-        if (error.code === 'auth/email-already-in-use') {
-          throw new Error('Diese E-Mail-Adresse wird bereits verwendet');
-        } else if (error.code === 'auth/weak-password') {
-          throw new Error('Das Passwort ist zu schwach');
-        } else {
-          throw new Error('Account-Erstellung fehlgeschlagen');
-        }
-      }
-    }
+        <!-- if (error.code === 'auth/email-already-in-use') { -->
+          <!-- throw new Error('Diese E-Mail-Adresse wird bereits verwendet'); -->
+        <!-- } else if (error.code === 'auth/weak-password') { -->
+          <!-- throw new Error('Das Passwort ist zu schwach'); -->
+        <!-- } else { -->
+          <!-- throw new Error('Account-Erstellung fehlgeschlagen'); -->
+        <!-- } -->
+      <!-- } -->
+    <!-- } -->
 
     // Logout-Funktion
     async function logout() {
@@ -2381,30 +2351,30 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
     // Setup-Button Event
-    document.getElementById('setupButton').addEventListener('click', async () => {
-      const email = prompt('Admin E-Mail-Adresse eingeben:');
-      const password = prompt('Admin Passwort eingeben (mindestens 6 Zeichen):');
+    <!-- document.getElementById('setupButton').addEventListener('click', async () => { -->
+      <!-- const email = prompt('Admin E-Mail-Adresse eingeben:'); -->
+      <!-- const password = prompt('Admin Passwort eingeben (mindestens 6 Zeichen):'); -->
       
-      if (!email || !password) {
-        showToast('Setup abgebrochen.', 'warning');
-        return;
-      }
+      <!-- if (!email || !password) { -->
+        <!-- showToast('Setup abgebrochen.', 'warning'); -->
+        <!-- return; -->
+      <!-- } -->
       
-      if (password.length < 6) {
-        showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'error');
-        return;
-      }
+      <!-- if (password.length < 6) { -->
+        <!-- showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'error'); -->
+        <!-- return; -->
+      <!-- } -->
       
-      try {
-        await createUser(email, password);
-        showToast('Admin-Account erfolgreich erstellt! Sie können sich jetzt anmelden.');
+      <!-- try { -->
+        <!-- await createUser(email, password); -->
+        <!-- showToast('Admin-Account erfolgreich erstellt! Sie können sich jetzt anmelden.'); -->
         
-        // Setup-Button ausblenden nach erfolgreichem Setup
-        document.getElementById('setupButton').style.display = 'none';
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
+        <!-- // Setup-Button ausblenden nach erfolgreichem Setup -->
+        <!-- document.getElementById('setupButton').style.display = 'none'; -->
+      <!-- } catch (error) { -->
+        <!-- showToast(error.message, 'error'); -->
+      <!-- } -->
+    <!-- }); -->
 
 // Session-Check beim Laden der Seite
 function checkExistingSession() {
@@ -2443,46 +2413,17 @@ function logout() {
   showToast('Erfolgreich abgemeldet.');
 }
 
-// Benutzer-Setup-Funktion (für initiale Einrichtung)
-async function setupUser() {
-  console.log('=== BENUTZER SETUP ===');
-  console.log('Verwenden Sie diese Funktion in der Browser-Konsole, um einen Benutzer zu erstellen:');
-  console.log('await createUser("admin", "deers2024")');
-  
-  // Automatisch ersten Admin-Benutzer erstellen (kann später entfernt werden)
-  if (window.firebaseReady) {
-    const success = await createUser("admin", "deers2024");
-    if (success) {
-      console.log('✅ Standard-Benutzer erstellt:');
-      console.log('E-Mail: admin');
-      console.log('Passwort: deers2024');
-      console.log('WICHTIG: Ändern Sie das Passwort nach dem ersten Login!');
-    }
-  } else {
-    console.log('⏳ Warten auf Firebase...');
-    window.addEventListener('firebaseReady', async () => {
-      const success = await createUser("admin", "deers2024");
-      if (success) {
-        console.log('✅ Standard-Benutzer erstellt:');
-        console.log('E-Mail: admin');
-        console.log('Passwort: deers2024');
-      }
-    });
-  }
-}
-
 // Global verfügbare Funktionen
 window.createUser = createUser;
 window.logout = logout;
-window.setupUser = setupUser;
 
 // Session-Check beim Laden der Seite
 window.addEventListener('load', () => {
   checkExistingSession();
   
   // Setup-Funktion nach kurzer Verzögerung ausführen
-  setTimeout(setupUser, 2000);
-});
+  <!-- setTimeout(setupUser, 2000); -->
+<!-- }); -->
 
 // Logout-Button zur Navigation hinzufügen
 document.addEventListener('DOMContentLoaded', () => {
