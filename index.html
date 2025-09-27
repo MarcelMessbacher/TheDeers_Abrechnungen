@@ -237,12 +237,13 @@ window.dispatchEvent(new Event('firebaseReady'));
 
 <!-- Kopfbereich mit Logo + Titel -->
 <div class="relative mb-8">
+  <!-- Logo responsive positioniert -->
   <div class="absolute top-0 right-5">
     <img src="The Deers Logo A4.svg" alt="Logo" class="h-44 w-auto">
   </div>
-  <div class="text-center">
-    <h1 class="text-4xl font-bold text-gray-800 mb-2">Heimspielabrechnung The Deers</h1>
-    <h2 class="text-3xl text-gray-600">TSV Hirschaid</h2>
+  <div class="text-center pr-0 sm:pr-48">
+    <h1 class="text-2xl sm:text-4xl font-bold text-gray-800 mb-2">Heimspielabrechnung The Deers</h1>
+    <h2 class="text-xl sm:text-3xl text-gray-600">TSV Hirschaid</h2>
   </div>
 </div>
 
@@ -343,46 +344,65 @@ window.dispatchEvent(new Event('firebaseReady'));
     </div>
   </div>
 
-  <!-- Modal: Essen -->
-  <div id="modalEssen" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white p-4 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
-      <h2 class="text-xl font-bold mb-4">Essen auswählen</h2>
-      <table class="min-w-full border mb-4">
-        <thead>
-          <tr>
-            <th class="border p-2">Name</th>
-            <th class="border p-2">Preis (€)</th>
-            <th class="border p-2">Anzahl</th>
-            <th class="border p-2">Zwischensumme (€)</th>
-          </tr>
-        </thead>
-        <tbody id="tab_Essen">
-          <!-- Dynamisch per JS befüllt -->
-        </tbody>
-      </table>
-      <div class="mb-4 font-semibold">
-        <strong>Gesamtsumme Essen:</strong> <span id="summe_Essen">0.00</span> €
-      </div>
-      <button id="btnSaveEssen" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Speichern</button>
-      <button id="btnCloseEssen" class="bg-gray-500 text-white px-4 py-2 rounded ml-2 hover:bg-gray-600">Schließen</button>
+<!-- Modal: Essen -->
+<div id="modalEssen" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-bold mb-4">Essen</h2>
+    <table class="w-full text-sm mb-4" id="tab_Essen">
+      <thead class="bg-gray-200">
+        <tr>
+          <th class="p-2 border">Name</th>
+          <th class="p-2 border">Preis</th>
+          <th class="p-2 border">Anzahl</th>
+          <th class="p-2 border">Zwischensumme</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Dynamisch per JS befüllt -->
+      </tbody>
+    </table>
+    <div class="mb-4 font-semibold">Summe Essen: <span id="summe_Essen">0.00</span> €</div>
+    <div class="flex justify-end space-x-2">
+      <button id="btnSaveEssen" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+      <button id="btnCloseEssen" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
     </div>
   </div>
+</div>
 
-  <!-- Modal: Abrechnung -->
-  <div id="modalAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
-      <h2 class="text-xl font-bold mb-4">Abrechnung</h2>
-      <div id="abrechnungContent"></div>
-      <div class="my-4">
-        <label class="block text-sm font-medium mb-1">Trinkgeld (€)</label>
-        <input type="number" id="inputTip" class="border rounded w-full p-2" step="0.01" min="0" />
+<!-- Modal: Abrechnung -->
+<div id="modalAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-bold mb-4">Abrechnung</h2>
+    <div id="abrechnungContent"></div>
+    <div class="my-4">
+      <label class="block text-sm font-medium mb-1">Trinkgeld (€)</label>
+      <div class="flex items-center space-x-2">
+        <button type="button" class="bg-yellow-400 hover:bg-yellow-600 text-white px-2 py-2 rounded font-semibold text-sm" id="btnAdd50Cent" title="50 Cent hinzufügen">
+          🪙 +0,50
+        </button>
+        <button type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-2 rounded font-semibold text-sm" id="btnAdd1Euro" title="1 Euro hinzufügen">
+          🪙 +1,00
+        </button>
+        <input type="number" id="inputTip" class="border rounded flex-1 p-2 text-right" step="0.01" min="0" value="0.00" />
       </div>
-      <div class="flex justify-end space-x-2">
-        <button id="btnPaid" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Bezahlt</button>
-        <button id="btnCloseAbrechnung" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+	    <!-- Schönes Hinweisfenster -->
+  <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+    <div class="flex items-center">
+      <span class="text-2xl mr-3">💡</span>
+      <div class="flex-1">
+        <p class="text-blue-800 text-sm font-medium">
+          Das Trinkgeld kommt direkt in die Sau 🐷
+        </p>
       </div>
     </div>
   </div>
+    </div>
+    <div class="flex justify-end space-x-2">
+      <button id="btnPaid" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Bezahlt</button>
+      <button id="btnCloseAbrechnung" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+    </div>
+  </div>
+</div>
 
 <script>
 
@@ -723,7 +743,7 @@ document.getElementById('btnSaveGetraenke').addEventListener('click', () => {
 // Essen Modal öffnen
 function openEssenModal(row) {
   aktuelleEssenRow = row;
-  const tbody = document.getElementById('tab_Essen');
+  const tbody = document.querySelector('#tab_Essen tbody');
   tbody.innerHTML = '';
 
   // Lade gespeicherte Essen-Daten
@@ -735,15 +755,15 @@ function openEssenModal(row) {
     const zwischensumme = round2(item.preis * menge).toFixed(2);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="border px-2 py-1">${item.name}</td>
-      <td class="border px-2 py-1 text-right">${item.preis.toFixed(2)}</td>
-      <td class="border px-2 py-1 text-center">
+      <td class="p-2 border">${item.name}</td>
+      <td class="p-2 border text-right">${item.preis.toFixed(2)} €</td>
+      <td class="p-2 border text-center">
         <div class="flex items-center justify-center space-x-2">
           <input type="number" min="0" value="${menge}" class="inputEssenAnzahl border rounded w-16 text-center p-1" data-preis="${item.preis}" />
           <button class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded font-semibold btnEssenPlus1" title="Anzahl um 1 erhöhen">+1</button>
         </div>
       </td>
-      <td class="border px-2 py-1 text-right zwischensumme">${zwischensumme}</td>
+      <td class="p-2 border zwischensumme text-right">${zwischensumme} €</td>
     `;
     tbody.appendChild(tr);
 
@@ -752,7 +772,7 @@ function openEssenModal(row) {
       const wert = parseInt(e.target.value) || 0;
       const preis = parseFloat(e.target.getAttribute('data-preis'));
       const sum = round2(preis * wert).toFixed(2);
-      tr.querySelector('.zwischensumme').textContent = sum;
+      tr.querySelector('.zwischensumme').textContent = sum + ' €';
       updateEssenSumme();
     });
 
@@ -773,10 +793,10 @@ function openEssenModal(row) {
 }
 
 function updateEssenSumme() {
-  const tbody = document.getElementById('tab_Essen');
+  const tbody = document.querySelector('#tab_Essen tbody');
   let sum = 0;
   tbody.querySelectorAll('tr').forEach(tr => {
-    const text = tr.querySelector('.zwischensumme').textContent;
+    const text = tr.querySelector('.zwischensumme').textContent.replace(' €', '');
     sum += parseFloat(text) || 0;
   });
   document.getElementById('summe_Essen').textContent = sum.toFixed(2);
@@ -895,8 +915,46 @@ function openAbrechnungModal(row) {
     </div>
   `;
 
-  document.getElementById('inputTip').value = '';
+  // Trinkgeld-Feld auf 0.00 setzen
+  document.getElementById('inputTip').value = '0.00';
+  
+  // Event-Listener für Trinkgeld-Buttons
+  setupTipButtons();
+  
   document.getElementById('modalAbrechnung').classList.remove('hidden');
+}
+
+// Trinkgeld-Buttons Setup
+function setupTipButtons() {
+  // Entferne alte Event-Listener falls vorhanden
+  const btn50Cent = document.getElementById('btnAdd50Cent');
+  const btn1Euro = document.getElementById('btnAdd1Euro');
+  
+  if (btn50Cent) {
+    // Clone und ersetze um alte Event-Listener zu entfernen
+    const new50CentBtn = btn50Cent.cloneNode(true);
+    btn50Cent.parentNode.replaceChild(new50CentBtn, btn50Cent);
+    
+    new50CentBtn.addEventListener('click', () => {
+      const tipInput = document.getElementById('inputTip');
+      const currentValue = parseFloat(tipInput.value) || 0;
+      const newValue = (currentValue + 0.50).toFixed(2);
+      tipInput.value = newValue;
+    });
+  }
+  
+  if (btn1Euro) {
+    // Clone und ersetze um alte Event-Listener zu entfernen
+    const new1EuroBtn = btn1Euro.cloneNode(true);
+    btn1Euro.parentNode.replaceChild(new1EuroBtn, btn1Euro);
+    
+    new1EuroBtn.addEventListener('click', () => {
+      const tipInput = document.getElementById('inputTip');
+      const currentValue = parseFloat(tipInput.value) || 0;
+      const newValue = (currentValue + 1.00).toFixed(2);
+      tipInput.value = newValue;
+    });
+  }
 }
 
 // Event-Listener für „Bezahlt"-Button
