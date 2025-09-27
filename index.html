@@ -656,7 +656,10 @@ function openGetraenkeModal(row) {
       <td class="p-2 border">${getraenk.name}</td>
       <td class="p-2 border text-right">${getraenk.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center">
-        <input type="number" min="0" value="${menge}" class="inputAnzahl border rounded w-16 text-center p-1" data-preis="${getraenk.preis}" />
+        <div class="flex items-center justify-center space-x-2">
+          <input type="number" min="0" value="${menge}" class="inputAnzahl border rounded w-16 text-center p-1" data-preis="${getraenk.preis}" />
+          <button class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded font-semibold btnPlus1" title="Anzahl um 1 erhöhen">+1</button>
+        </div>
       </td>
       <td class="p-2 border zwischensumme text-right">${zwischensumme} €</td>
     `;
@@ -669,6 +672,17 @@ function openGetraenkeModal(row) {
       const sum = round2(preis * wert).toFixed(2);
       tr.querySelector('.zwischensumme').textContent = sum + ' €';
       updateGetraenkeSumme();
+    });
+
+    // Event für +1 Button
+    tr.querySelector('.btnPlus1').addEventListener('click', () => {
+      const inputField = tr.querySelector('.inputAnzahl');
+      const currentValue = parseInt(inputField.value) || 0;
+      inputField.value = currentValue + 1;
+      
+      // Trigger das input event um die Summe zu aktualisieren
+      const event = new Event('input');
+      inputField.dispatchEvent(event);
     });
   });
 
@@ -724,18 +738,33 @@ function openEssenModal(row) {
       <td class="border px-2 py-1">${item.name}</td>
       <td class="border px-2 py-1 text-right">${item.preis.toFixed(2)}</td>
       <td class="border px-2 py-1 text-center">
-        <input type="number" min="0" value="${menge}" class="inputEssenAnzahl border rounded w-16 text-center p-1" data-preis="${item.preis}" />
+        <div class="flex items-center justify-center space-x-2">
+          <input type="number" min="0" value="${menge}" class="inputEssenAnzahl border rounded w-16 text-center p-1" data-preis="${item.preis}" />
+          <button class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded font-semibold btnEssenPlus1" title="Anzahl um 1 erhöhen">+1</button>
+        </div>
       </td>
       <td class="border px-2 py-1 text-right zwischensumme">${zwischensumme}</td>
     `;
     tbody.appendChild(tr);
 
+    // Event für Eingabe Änderung
     tr.querySelector('.inputEssenAnzahl').addEventListener('input', (e) => {
       const wert = parseInt(e.target.value) || 0;
       const preis = parseFloat(e.target.getAttribute('data-preis'));
       const sum = round2(preis * wert).toFixed(2);
       tr.querySelector('.zwischensumme').textContent = sum;
       updateEssenSumme();
+    });
+
+    // Event für +1 Button
+    tr.querySelector('.btnEssenPlus1').addEventListener('click', () => {
+      const inputField = tr.querySelector('.inputEssenAnzahl');
+      const currentValue = parseInt(inputField.value) || 0;
+      inputField.value = currentValue + 1;
+      
+      // Trigger das input event um die Summe zu aktualisieren
+      const event = new Event('input');
+      inputField.dispatchEvent(event);
     });
   });
 
