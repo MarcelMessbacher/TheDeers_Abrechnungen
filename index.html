@@ -229,15 +229,7 @@ window.dispatchEvent(new Event('firebaseReady'));
       
       <div id="loginError" class="text-red-600 text-sm text-center hidden mt-2"></div>
     </form>
-	
-	<!-- Setup Button (nur für Ersteinrichtung) -->
-    <div class="mt-4 text-center">
-      <button id="setupButton" class="text-sm text-blue-600 hover:text-blue-800 underline">
-        Erste Einrichtung (Admin-Account erstellen)
-      </button>
-    </div>
-	
-  </div>
+	</div>
 </div>
 
 <!-- Haupt-App (wird nach Login angezeigt) -->
@@ -2209,51 +2201,6 @@ window.debugReports = function() {
 let isLoggedIn = false;
 let currentUser = null;
 
-// Benutzer erstellen (nur für Setup)
-// Benutzer erstellen (für Setup)
-async function createUser(email, password) {
-  try {
-    if (!window.firebaseAuth) {
-      console.error('Firebase Auth nicht initialisiert');
-      return false;
-    }
-
-    const userCredential = await window.authUtils.createUserWithEmailAndPassword(
-      window.firebaseAuth, 
-      email, 
-      password
-    );
-    
-    // Zusätzlich Benutzer-Dokument in Firestore erstellen mit der UID als Dokument-ID
-    const userData = {
-      email: email,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      role: 'admin',
-      uid: userCredential.user.uid
-    };
-
-    // WICHTIG: Benutze die UID als Dokument-ID
-    await window.firebaseUtils.addDoc(
-      window.firebaseUtils.collection(window.firebaseDB, "users"),
-      userData
-    );
-
-    console.log("Admin-Benutzer erstellt:", userCredential.user);
-    return userCredential.user;
-  } catch (error) {
-    console.error("Fehler beim Erstellen des Benutzers: ", error);
-    
-    if (error.code === 'auth/email-already-in-use') {
-      throw new Error('Diese E-Mail-Adresse wird bereits verwendet');
-    } else if (error.code === 'auth/weak-password') {
-      throw new Error('Das Passwort ist zu schwach');
-    } else {
-      throw new Error('Account-Erstellung fehlgeschlagen');
-    }
-  }
-}
-
 // Benutzer authentifizieren
 async function authenticateUser(email, password) {
       try {
@@ -2405,32 +2352,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-    // Setup-Button Event
-    document.getElementById('setupButton').addEventListener('click', async () => {
-      const email = prompt('Admin E-Mail-Adresse eingeben:');
-      const password = prompt('Admin Passwort eingeben (mindestens 6 Zeichen):');
-      
-      if (!email || !password) {
-        showToast('Setup abgebrochen.', 'warning');
-        return;
-      }
-      
-      if (password.length < 6) {
-        showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'error');
-        return;
-      }
-      
-      try {
-        await createUser(email, password);
-        showToast('Admin-Account erfolgreich erstellt! Sie können sich jetzt anmelden.');
-        
-        // Setup-Button ausblenden nach erfolgreichem Setup
-        document.getElementById('setupButton').style.display = 'none';
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-
 // Session-Check beim Laden der Seite
 function checkExistingSession() {
   const savedLogin = sessionStorage.getItem('isLoggedIn');
@@ -2468,38 +2389,13 @@ function logout() {
   showToast('Erfolgreich abgemeldet.');
 }
 
-// Benutzer-Setup-Funktion (für initiale Einrichtung)
-async function setupUser() {
-  console.log('=== BENUTZER SETUP ===');
-  console.log('Verwenden Sie die Konsole oder den Setup-Button um einen Admin-Account zu erstellen');
-  console.log('Beispiel: await createUser("kassier@thedeers.de", "TheDeers180_Verwaltung")');
-  
-}
-
 // Global verfügbare Funktionen
-window.createUser = createUser;
 window.logout = logout;
-window.setupUser = setupUser;
 
 // Session-Check beim Laden der Seite
 window.addEventListener('load', () => {
   checkExistingSession();
   
-  // Setup-Funktion nach kurzer Verzögerung ausführen
-  setTimeout(setupUser, 2000);
-});
-
-// Logout-Button zur Navigation hinzufügen
-document.addEventListener('DOMContentLoaded', () => {
-  const nav = document.querySelector('nav');
-  if (nav) {
-    const logoutBtn = document.createElement('button');
-    logoutBtn.textContent = 'Abmelden';
-    logoutBtn.className = 'bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 font-bold';
-    logoutBtn.style.width = '150px';
-    logoutBtn.onclick = logout;
-    nav.appendChild(logoutBtn);
-  }
 });
 </script>
 
