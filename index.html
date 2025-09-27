@@ -39,15 +39,25 @@ window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc 
 window.authUtils = { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut };
 window.firebaseReady = true;
 
+// Auth State Observer
 onAuthStateChanged(auth, (user) => {
   console.log('Auth state changed:', user ? 'Benutzer angemeldet' : 'Benutzer abgemeldet');
   window.currentFirebaseUser = user;
   
   if (user) {
+    // Benutzer ist angemeldet
+    console.log('Angemeldet als:', user.email);
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
-    loadGamesFromFirebase();
+    
+    // Warte kurz bis DOM ready ist
+    setTimeout(() => {
+      loadGamesFromFirebase();
+      showPage('home'); // Stelle sicher dass eine Seite aktiv ist
+    }, 100);
   } else {
+    // Benutzer ist nicht angemeldet
+    console.log('Benutzer abgemeldet');
     document.getElementById('loginPage').classList.remove('hidden');
     document.getElementById('mainApp').classList.add('hidden');
   }
@@ -221,11 +231,11 @@ window.dispatchEvent(new Event('firebaseReady'));
     </form>
 	
 	<!-- Setup Button (nur für Ersteinrichtung) -->
-    <!-- <div class="mt-4 text-center"> -->
-      <!-- <button id="setupButton" class="text-sm text-blue-600 hover:text-blue-800 underline"> -->
-        <!-- Erste Einrichtung (Admin-Account erstellen) -->
-      <!-- </button> -->
-    <!-- </div> -->
+    <div class="mt-4 text-center">
+      <button id="setupButton" class="text-sm text-blue-600 hover:text-blue-800 underline">
+        Erste Einrichtung (Admin-Account erstellen)
+      </button>
+    </div>
 	
   </div>
 </div>
@@ -247,6 +257,7 @@ window.dispatchEvent(new Event('firebaseReady'));
   <nav class="mb-6" align="center">
   <button id="btn-home" onclick="showPage('home')" class="nav-btn bg-gray-400 text-white px-4 py-2 rounded mb-4 hover:bg-gray-400 font-bold" style="width: 150px;">Heimspiele</button>
   <button id="btn-reports" onclick="showPage('reports')" class="nav-btn bg-gray-300 text-white px-4 py-2 rounded mb-4 hover:bg-gray-400 font-bold" style="width: 150px;">Auswertungen</button>
+  <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 font-bold" style="width: 150px;">Abmelden</button>
 </nav>
 <div id="page-home">
   <!-- Button: Neues Heimspiel -->
@@ -2199,35 +2210,49 @@ let isLoggedIn = false;
 let currentUser = null;
 
 // Benutzer erstellen (nur für Setup)
-<!-- async function createUser(username, password) { -->
-  <!-- try { -->
-    <!-- if (!window.firebaseDB) { -->
-      <!-- console.error('Firebase nicht initialisiert'); -->
-      <!-- return false; -->
-    <!-- } -->
+// Benutzer erstellen (für Setup)
+async function createUser(email, password) {
+  try {
+    if (!window.firebaseAuth) {
+      console.error('Firebase Auth nicht initialisiert');
+      return false;
+    }
 
-    <!-- // Passwort hashen (einfacher Hash - in Produktion sollte bcrypt verwendet werden) -->
-    <!-- const hashedPassword = btoa(password); // Base64 encoding als einfacher Hash -->
-
-    <!-- const userData = { -->
-      <!-- username: username, -->
-      <!-- password: hashedPassword, -->
-      <!-- createdAt: new Date().toISOString(), -->
-      <!-- isActive: true -->
-    <!-- }; -->
-
-    <!-- const docRef = await window.firebaseUtils.addDoc( -->
-      <!-- window.firebaseUtils.collection(window.firebaseDB, "users"),  -->
-      <!-- userData -->
-    <!-- ); -->
+    const userCredential = await window.authUtils.createUserWithEmailAndPassword(
+      window.firebaseAuth, 
+      email, 
+      password
+    );
     
-    <!-- console.log("Benutzer erstellt mit ID: ", docRef.id); -->
-    <!-- return true; -->
-  <!-- } catch (error) { -->
-    <!-- console.error("Fehler beim Erstellen des Benutzers: ", error); -->
-    <!-- return false; -->
-  <!-- } -->
-<!-- } -->
+    // Zusätzlich Benutzer-Dokument in Firestore erstellen mit der UID als Dokument-ID
+    const userData = {
+      email: email,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      role: 'admin',
+      uid: userCredential.user.uid
+    };
+
+    // WICHTIG: Benutze die UID als Dokument-ID
+    await window.firebaseUtils.addDoc(
+      window.firebaseUtils.collection(window.firebaseDB, "users"),
+      userData
+    );
+
+    console.log("Admin-Benutzer erstellt:", userCredential.user);
+    return userCredential.user;
+  } catch (error) {
+    console.error("Fehler beim Erstellen des Benutzers: ", error);
+    
+    if (error.code === 'auth/email-already-in-use') {
+      throw new Error('Diese E-Mail-Adresse wird bereits verwendet');
+    } else if (error.code === 'auth/weak-password') {
+      throw new Error('Das Passwort ist zu schwach');
+    } else {
+      throw new Error('Account-Erstellung fehlgeschlagen');
+    }
+  }
+}
 
 // Benutzer authentifizieren
 async function authenticateUser(email, password) {
@@ -2381,30 +2406,30 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
     // Setup-Button Event
-    <!-- document.getElementById('setupButton').addEventListener('click', async () => { -->
-      <!-- const email = prompt('Admin E-Mail-Adresse eingeben:'); -->
-      <!-- const password = prompt('Admin Passwort eingeben (mindestens 6 Zeichen):'); -->
+    document.getElementById('setupButton').addEventListener('click', async () => {
+      const email = prompt('Admin E-Mail-Adresse eingeben:');
+      const password = prompt('Admin Passwort eingeben (mindestens 6 Zeichen):');
       
-      <!-- if (!email || !password) { -->
-        <!-- showToast('Setup abgebrochen.', 'warning'); -->
-        <!-- return; -->
-      <!-- } -->
+      if (!email || !password) {
+        showToast('Setup abgebrochen.', 'warning');
+        return;
+      }
       
-      <!-- if (password.length < 6) { -->
-        <!-- showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'error'); -->
-        <!-- return; -->
-      <!-- } -->
+      if (password.length < 6) {
+        showToast('Passwort muss mindestens 6 Zeichen lang sein.', 'error');
+        return;
+      }
       
-      <!-- try { -->
-        <!-- await createUser(email, password); -->
-        <!-- showToast('Admin-Account erfolgreich erstellt! Sie können sich jetzt anmelden.'); -->
+      try {
+        await createUser(email, password);
+        showToast('Admin-Account erfolgreich erstellt! Sie können sich jetzt anmelden.');
         
-        <!-- // Setup-Button ausblenden nach erfolgreichem Setup -->
-        <!-- document.getElementById('setupButton').style.display = 'none'; -->
-      <!-- } catch (error) { -->
-        <!-- showToast(error.message, 'error'); -->
-      <!-- } -->
-    <!-- }); -->
+        // Setup-Button ausblenden nach erfolgreichem Setup
+        document.getElementById('setupButton').style.display = 'none';
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
 
 // Session-Check beim Laden der Seite
 function checkExistingSession() {
@@ -2446,29 +2471,9 @@ function logout() {
 // Benutzer-Setup-Funktion (für initiale Einrichtung)
 async function setupUser() {
   console.log('=== BENUTZER SETUP ===');
-  console.log('Verwenden Sie diese Funktion in der Browser-Konsole, um einen Benutzer zu erstellen:');
-  console.log('await createUser("admin", "deers2024")');
+  console.log('Verwenden Sie die Konsole oder den Setup-Button um einen Admin-Account zu erstellen');
+  console.log('Beispiel: await createUser("kassier@thedeers.de", "TheDeers180_Verwaltung")');
   
-  // Automatisch ersten Admin-Benutzer erstellen (kann später entfernt werden)
-  if (window.firebaseReady) {
-    const success = await createUser("admin", "deers2024");
-    if (success) {
-      console.log('✅ Standard-Benutzer erstellt:');
-      console.log('E-Mail: admin');
-      console.log('Passwort: deers2024');
-      console.log('WICHTIG: Ändern Sie das Passwort nach dem ersten Login!');
-    }
-  } else {
-    console.log('⏳ Warten auf Firebase...');
-    window.addEventListener('firebaseReady', async () => {
-      const success = await createUser("admin", "deers2024");
-      if (success) {
-        console.log('✅ Standard-Benutzer erstellt:');
-        console.log('E-Mail: admin');
-        console.log('Passwort: deers2024');
-      }
-    });
-  }
 }
 
 // Global verfügbare Funktionen
