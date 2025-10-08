@@ -652,10 +652,17 @@ function addGuestRow() {
   row.querySelector('.btnAddGetraenke').addEventListener('click', () => openGetraenkeModal(row));
   row.querySelector('.btnAddEssen').addEventListener('click', () => openEssenModal(row));
   row.querySelector('.btnAbrechnen').addEventListener('click', () => openAbrechnungModal(row));
-  row.querySelector('.btnDeleteGuest').addEventListener('click', () => {
-    row.remove();
-    updateFinalizeButtonState();
-  });
+row.querySelector('.btnDeleteGuest').addEventListener('click', () => {
+  const guestName = row.querySelector('input[type="text"]').value.trim() || 'diesen Gast';
+  showConfirm(
+    `Möchten Sie ${guestName} wirklich löschen?`, 
+    () => {
+      row.remove();
+      updateFinalizeButtonState();
+    },
+    'Löschen'
+  );
+});
 }
 
 // Getränke Modal öffnen
@@ -721,7 +728,10 @@ function updateGetraenkeSumme() {
 }
 
 document.getElementById('btnSaveGetraenke').addEventListener('click', () => {
-  if (!aktuelleGetraenkeRow) return;
+  if (!aktuelleGetraenkeRow) {
+    console.log('ERROR: Keine aktuelleGetraenkeRow!');
+    return;
+  }
 
   const tbody = document.querySelector('#tab_Getraenke tbody');
   const getraenkeData = {};
@@ -733,7 +743,14 @@ document.getElementById('btnSaveGetraenke').addEventListener('click', () => {
     }
   });
 
+  console.log('=== GETRÄNKE SPEICHERN ===');
+  console.log('Getränke Data:', getraenkeData);
+  console.log('JSON String:', JSON.stringify(getraenkeData));
+  
   aktuelleGetraenkeRow.setAttribute('data-getraenke', JSON.stringify(getraenkeData));
+  
+  console.log('Nach setAttribute:', aktuelleGetraenkeRow.getAttribute('data-getraenke'));
+  
   updateGesamtbetrag(aktuelleGetraenkeRow);
 
   document.getElementById('modalGetraenke').classList.add('hidden');
@@ -803,9 +820,12 @@ function updateEssenSumme() {
 }
 
 document.getElementById('btnSaveEssen').addEventListener('click', () => {
-  if (!aktuelleEssenRow) return;
+  if (!aktuelleEssenRow) {
+    console.log('ERROR: Keine aktuelleEssenRow!');
+    return;
+  }
 
-  const tbody = document.getElementById('#tab_Essen tbody');
+  const tbody = document.querySelector('#tab_Essen tbody');
   const essenData = {};
   tbody.querySelectorAll('tr').forEach(tr => {
     const name = tr.children[0].textContent;
@@ -815,7 +835,14 @@ document.getElementById('btnSaveEssen').addEventListener('click', () => {
     }
   });
 
+  console.log('=== ESSEN SPEICHERN ===');
+  console.log('Essen Data:', essenData);
+  console.log('JSON String:', JSON.stringify(essenData));
+  
   aktuelleEssenRow.setAttribute('data-essen', JSON.stringify(essenData));
+  
+  console.log('Nach setAttribute:', aktuelleEssenRow.getAttribute('data-essen'));
+  
   updateGesamtbetrag(aktuelleEssenRow);
 
   document.getElementById('modalEssen').classList.add('hidden');
@@ -1384,55 +1411,59 @@ function editGame(index) {
   const tbody = document.querySelector('#tab_Gaeste tbody');
   tbody.innerHTML = '';
   
-  if (spiel.gaeste && spiel.gaeste.length > 0) {
-    spiel.gaeste.forEach(gast => {
-      addGuestRow();
-      const lastRow = tbody.lastChild;
-      lastRow.querySelector('input[type="text"]').value = gast.name || '';
-      if (gast.getraenke) lastRow.setAttribute('data-getraenke', gast.getraenke);
-      if (gast.essen) lastRow.setAttribute('data-essen', gast.essen);
-      if (gast.tip) lastRow.setAttribute('data-tip', gast.tip);
-      
-      updateGesamtbetrag(lastRow);
-      
-      if (gast.paid) {
-        lastRow.classList.add('bg-green-100');
-        lastRow.setAttribute('data-paid', 'true');
 
-        const nameInput = lastRow.querySelector('input[type="text"]');
-        if (nameInput) {
-          nameInput.setAttribute('disabled', 'true');
-          nameInput.classList.add('bg-gray-200');
-        }
+if (spiel.gaeste && spiel.gaeste.length > 0) {
+  spiel.gaeste.forEach(gast => {
+    addGuestRow();
+    const lastRow = tbody.lastChild;
+    lastRow.querySelector('input[type="text"]').value = gast.name || '';
+    
+    // Setze die Attribute mit den gespeicherten Werten
+    // Wichtig: Als String speichern, nicht nur wenn vorhanden
+    lastRow.setAttribute('data-getraenke', gast.getraenke || '{}');
+    lastRow.setAttribute('data-essen', gast.essen || '{}');
+    lastRow.setAttribute('data-tip', gast.tip || '0.00');
+    
+    updateGesamtbetrag(lastRow);
+    
+    if (gast.paid) {
+      lastRow.classList.add('bg-green-100');
+      lastRow.setAttribute('data-paid', 'true');
 
-        const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
-        if (btnGetraenke) {
-          btnGetraenke.setAttribute('disabled', 'true');
-          btnGetraenke.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-          btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
-        }
-
-        const btnEssen = lastRow.querySelector('.btnAddEssen');
-        if (btnEssen) {
-          btnEssen.setAttribute('disabled', 'true');
-          btnEssen.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-          btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
-        }
-
-        const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
-        if (btnAbrechnen) {
-          btnAbrechnen.setAttribute('disabled', 'true');
-          btnAbrechnen.classList.remove('bg-gray-500', 'hover:bg-gray-600');
-          btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
-        }
-
-        const lastTd = lastRow.querySelectorAll('td')[5];
-        if (lastTd) {
-          lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
-        }
+      const nameInput = lastRow.querySelector('input[type="text"]');
+      if (nameInput) {
+        nameInput.setAttribute('disabled', 'true');
+        nameInput.classList.add('bg-gray-200');
       }
-    });
-  } else {
+
+      const btnGetraenke = lastRow.querySelector('.btnAddGetraenke');
+      if (btnGetraenke) {
+        btnGetraenke.setAttribute('disabled', 'true');
+        btnGetraenke.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+        btnGetraenke.classList.add('bg-gray-400', 'cursor-not-allowed');
+      }
+
+      const btnEssen = lastRow.querySelector('.btnAddEssen');
+      if (btnEssen) {
+        btnEssen.setAttribute('disabled', 'true');
+        btnEssen.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+        btnEssen.classList.add('bg-gray-400', 'cursor-not-allowed');
+      }
+
+      const btnAbrechnen = lastRow.querySelector('.btnAbrechnen');
+      if (btnAbrechnen) {
+        btnAbrechnen.setAttribute('disabled', 'true');
+        btnAbrechnen.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+        btnAbrechnen.classList.add('bg-gray-400', 'cursor-not-allowed');
+      }
+
+      const lastTd = lastRow.querySelectorAll('td')[5];
+      if (lastTd) {
+        lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
+      }
+    }
+  });
+} else {
     // Fallback: mindestens 4 leere Zeilen
     for (let i = 0; i < 4; i++) addGuestRow();
   }
