@@ -805,7 +805,7 @@ function updateEssenSumme() {
 document.getElementById('btnSaveEssen').addEventListener('click', () => {
   if (!aktuelleEssenRow) return;
 
-  const tbody = document.getElementById('tab_Essen');
+  const tbody = document.getElementById('#tab_Essen tbody');
   const essenData = {};
   tbody.querySelectorAll('tr').forEach(tr => {
     const name = tr.children[0].textContent;
