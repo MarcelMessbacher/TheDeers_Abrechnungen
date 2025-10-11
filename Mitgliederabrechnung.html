@@ -11,61 +11,59 @@
   <!-- jsPDF-AutoTable -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
   <!-- Firebase v10 -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-	import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // Firebase Konfiguration
-    const firebaseConfig = {
-      apiKey: "AIzaSyD5B4C8EiEdLA2XWLzb2JvcFi9DAnV1M7E",
-      authDomain: "thedeersabrechnung.firebaseapp.com",
-      projectId: "thedeersabrechnung",
-      storageBucket: "thedeersabrechnung.firebasestorage.app",
-      messagingSenderId: "27261468983",
-      appId: "1:27261468983:web:1a6340756263aad9455ab2",
-      measurementId: "G-6KBNXWTYJ1"
-    };
+  // Firebase Konfiguration (gleich wie in der anderen Datei)
+  const firebaseConfig = {
+    apiKey: "AIzaSyD5B4C8EiEdLA2XWLzb2JvcFi9DAnV1M7E",
+    authDomain: "thedeersabrechnung.firebaseapp.com",
+    projectId: "thedeersabrechnung",
+    storageBucket: "thedeersabrechnung.firebasestorage.app",
+    messagingSenderId: "27261468983",
+    appId: "1:27261468983:web:1a6340756263aad9455ab2",
+    measurementId: "G-6KBNXWTYJ1"
+  };
 
-    // Firebase initialisieren
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-	const auth = getAuth(app);
+  // Firebase initialisieren
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
 
-    // Firebase Funktionen global verfügbar machen
-    window.firebaseDB = db;
-    window.firebaseAuth = auth;
-    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
-    window.authUtils = { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut };
-    window.firebaseReady = true;
+  // Firebase Funktionen global verfügbar machen
+  window.firebaseDB = db;
+  window.firebaseAuth = auth;
+  window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
+  window.authUtils = { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut };
+  window.firebaseReady = true;
 
-    // Auth State Observer
-    onAuthStateChanged(auth, (user) => {
-      console.log('Auth state changed:', user ? 'Benutzer angemeldet' : 'Benutzer abgemeldet');
-      window.currentFirebaseUser = user;
+  // Auth State Observer - HIER DARF LOADMEMBERSFRFIREBASE NICHT AUFGERUFEN WERDEN
+  onAuthStateChanged(auth, (user) => {
+    console.log('Auth state changed:', user ? 'Benutzer angemeldet' : 'Benutzer abgemeldet');
+    window.currentFirebaseUser = user;
+    
+    if (user) {
+      // Benutzer ist angemeldet
+      console.log('Angemeldet als:', user.email);
+      document.getElementById('loginPage').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
       
-      if (user) {
-        // Benutzer ist angemeldet
-        console.log('Angemeldet als:', user.email);
-        document.getElementById('loginPage').classList.add('hidden');
-        document.getElementById('mainApp').classList.remove('hidden');
-        
-        // Warte kurz bis DOM ready ist
-        setTimeout(() => {
-          loadMembersFromFirebase();
-          showPage('members');
-        }, 100);
-      } else {
-        // Benutzer ist nicht angemeldet
-        console.log('Benutzer abgemeldet');
-        document.getElementById('loginPage').classList.remove('hidden');
-        document.getElementById('mainApp').classList.add('hidden');
-      }
-    });
+      // Nur UI updaten, nicht loadMembersFromFirebase aufrufen
+      // Das wird vom Login-Handler aufgerufen
+      
+    } else {
+      // Benutzer ist nicht angemeldet
+      console.log('Benutzer abgemeldet');
+      document.getElementById('loginPage').classList.remove('hidden');
+      document.getElementById('mainApp').classList.add('hidden');
+    }
+  });
 
-    // Event für Firebase-Initialisierung
-    window.dispatchEvent(new Event('firebaseReady'));
-  </script>
+  // Event für Firebase-Initialisierung
+  window.dispatchEvent(new Event('firebaseReady'));
+</script>
   <style>
     .modal-background {
       background-image: url('The Deers Logo dunkelgrau-hellgrau.svg');
@@ -456,6 +454,9 @@ let selectedFavorites = [];
 let currentBookingMemberId = null;
 let currentSettlementMemberId = null;
 let confirmCallback = null;
+let isLoggedIn = false;
+let currentUser = null;
+let loadMembersTimeout = null;
 
 // Toast-Funktionen
 function showToast(message, type = 'success') {
@@ -560,11 +561,9 @@ async function loadMembersFromFirebase() {
       });
     });
     
-    console.log("Mitglieder geladen:", members.length);
     renderMembers();
   } catch (error) {
     console.error("Fehler beim Laden aus Firebase: ", error);
-    showToast('Fehler beim Laden der Mitglieder: ' + error.message, 'error');
   }
 }
 
@@ -1010,6 +1009,42 @@ async function authenticateUser(email, password) {
     );
     
     console.log('Benutzer erfolgreich angemeldet:', userCredential.user);
+    
+    // Prüfe ob Benutzer in der users Collection existiert
+    try {
+      const usersSnapshot = await window.firebaseUtils.getDocs(
+        window.firebaseUtils.collection(window.firebaseDB, "users")
+      );
+      
+      let userExists = false;
+      usersSnapshot.forEach(doc => {
+        const userData = doc.data();
+        if (userData.uid === userCredential.user.uid || userData.email === userCredential.user.email) {
+          userExists = true;
+          console.log('Benutzer in users Collection gefunden:', userData);
+        }
+      });
+      
+      if (!userExists) {
+        console.warn('Benutzer existiert nicht in users Collection, erstelle Eintrag...');
+        const userData = {
+          email: userCredential.user.email,
+          uid: userCredential.user.uid,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          role: 'admin'
+        };
+        await window.firebaseUtils.addDoc(
+          window.firebaseUtils.collection(window.firebaseDB, "users"), 
+          userData
+        );
+        console.log('Benutzer in users Collection erstellt');
+      }
+    } catch (firebaseError) {
+      console.warn('Fehler beim Prüfen der users Collection:', firebaseError);
+      // Fehler hier ist nicht kritisch - fahre fort
+    }
+    
     return userCredential.user;
   } catch (error) {
     console.error("Fehler bei der Authentifizierung: ", error);
@@ -1027,11 +1062,54 @@ async function authenticateUser(email, password) {
 // Logout
 async function logout() {
   try {
-    await window.authUtils.signOut(window.firebaseAuth);
+    if (window.firebaseAuth) {
+      await window.authUtils.signOut(window.firebaseAuth);
+    }
+    
+    // Session clearen
+    sessionStorage.removeItem('isLoggedIn');
+    sessionStorage.removeItem('currentUser');
+    
+    // UI zurücksetzen
+    document.getElementById('loginPage').classList.remove('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+    document.getElementById('loginForm').reset();
+    document.getElementById('loginError').classList.add('hidden');
+    
+    isLoggedIn = false;
+    currentUser = null;
+    
     showToast('Erfolgreich abgemeldet.');
   } catch (error) {
     console.error('Logout-Fehler:', error);
     showToast('Fehler beim Abmelden.', 'error');
+  }
+}
+
+function checkExistingSession() {
+  const savedLogin = sessionStorage.getItem('isLoggedIn');
+  const savedUser = sessionStorage.getItem('currentUser');
+  
+  if (savedLogin === 'true' && savedUser) {
+    try {
+      isLoggedIn = true;
+      currentUser = JSON.parse(savedUser);
+      
+      document.getElementById('loginPage').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
+      
+      // Bestehende Daten laden
+      setTimeout(() => {
+        if (window.firebaseDB) {
+          loadMembersFromFirebase();
+        }
+        showPage('members');
+      }, 100);
+    } catch (error) {
+      console.error('Session-Check Fehler:', error);
+      sessionStorage.removeItem('isLoggedIn');
+      sessionStorage.removeItem('currentUser');
+    }
   }
 }
 
@@ -1055,6 +1133,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   loginError.classList.add('hidden');
   
   try {
+    // Warten bis Firebase bereit ist
     if (!window.firebaseReady) {
       await new Promise(resolve => {
         if (window.firebaseReady) {
@@ -1069,16 +1148,21 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const user = await authenticateUser(email, password);
     
     if (user) {
+      // Erfolgreicher Login
       isLoggedIn = true;
       currentUser = user;
       
+      // Session speichern
       sessionStorage.setItem('isLoggedIn', 'true');
       sessionStorage.setItem('currentUser', JSON.stringify(user));
       
+      // UI wechseln
       document.getElementById('loginPage').classList.add('hidden');
       document.getElementById('mainApp').classList.remove('hidden');
       
+      // Bestehende Daten laden
       await loadMembersFromFirebase();
+      showPage('members');
       
       showToast('Erfolgreich angemeldet!');
     }
@@ -1102,19 +1186,41 @@ window.reactivateMember = reactivateMember;
 window.logout = logout;
 
 // Session-Check beim Laden
+function checkExistingSession() {
+  const savedLogin = sessionStorage.getItem('isLoggedIn');
+  const savedUser = sessionStorage.getItem('currentUser');
+  
+  if (savedLogin === 'true' && savedUser) {
+    try {
+      isLoggedIn = true;
+      currentUser = JSON.parse(savedUser);
+      
+      document.getElementById('loginPage').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
+      
+      // Bestehende Daten laden
+      setTimeout(() => {
+        loadMembersFromFirebase();
+        showPage('members');
+      }, 100);
+    } catch (error) {
+      console.error('Session-Check Fehler:', error);
+      sessionStorage.removeItem('isLoggedIn');
+      sessionStorage.removeItem('currentUser');
+    }
+  }
+}
+
 window.addEventListener('load', () => {
   console.log('Seite geladen');
   
-  // Wenn Firebase bereit ist, lade Mitglieder
-  if (window.firebaseReady) {
+  // Session prüfen
+  checkExistingSession();
+  
+  // Firebase-ready Event listener als Fallback
+  window.addEventListener('firebaseReady', () => {
     console.log('Firebase ist bereit');
-    loadMembersFromFirebase();
-  } else {
-    window.addEventListener('firebaseReady', () => {
-      console.log('Firebase Ready Event empfangen');
-      loadMembersFromFirebase();
-    }, { once: true });
-  }
+  });
 });
 
 // Modal-Hintergrund-Klicks zum Schließen
