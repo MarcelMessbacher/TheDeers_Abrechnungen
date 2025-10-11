@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mitgliederverwaltung The Deers</title>
+  <link rel="icon" type="image/svg" href="The Deers Logo nur Hirsch.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- jsPDF-AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <!-- Firebase v10 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+	import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // Firebase Konfiguration (gleich wie in der anderen Datei)
+    const firebaseConfig = {
+      apiKey: "AIzaSyD5B4C8EiEdLA2XWLzb2JvcFi9DAnV1M7E",
+      authDomain: "thedeersabrechnung.firebaseapp.com",
+      projectId: "thedeersabrechnung",
+      storageBucket: "thedeersabrechnung.firebasestorage.app",
+      messagingSenderId: "27261468983",
+      appId: "1:27261468983:web:1a6340756263aad9455ab2",
+      measurementId: "G-6KBNXWTYJ1"
+    };
+
+    // Firebase initialisieren
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+	const auth = getAuth(app);
+
+    // Firebase Funktionen global verfügbar machen
+    window.firebaseDB = db;
+    window.firebaseAuth = auth;
+    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
+    window.authUtils = { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut };
+    window.firebaseReady = true;
+
+    // Auth State Observer
+    onAuthStateChanged(auth, (user) => {
+      console.log('Auth state changed:', user ? 'Benutzer angemeldet' : 'Benutzer abgemeldet');
+      window.currentFirebaseUser = user;
+      
+      if (user) {
+        // Benutzer ist angemeldet
+        console.log('Angemeldet als:', user.email);
+        document.getElementById('loginPage').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        
+        // Warte kurz bis DOM ready ist
+        setTimeout(() => {
+          loadMembersFromFirebase();
+          showPage('members');
+        }, 100);
+      } else {
+        // Benutzer ist nicht angemeldet
+        console.log('Benutzer abgemeldet');
+        document.getElementById('loginPage').classList.remove('hidden');
+        document.getElementById('mainApp').classList.add('hidden');
+      }
+    });
+
+    // Event für Firebase-Initialisierung
+    window.dispatchEvent(new Event('firebaseReady'));
+  </script>
+  <style>
+    .modal-background {
+      background-image: url('The Deers Logo dunkelgrau-hellgrau.svg');
+      background-repeat: no-repeat;
+      background-position: center center;
+      background-size: contain;
+      background-attachment: fixed;
+      position: relative;
+    }
+    
+    .modal-background::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.85);
+      z-index: 1;
+    }
+    
+    .modal-content {
+      position: relative;
+      z-index: 2;
+    }
+	
+    /* Toast Styles */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #16A34A;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      font-weight: 500;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+      max-width: 500px;
+      text-align: center;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+
+    .toast.error {
+      background-color: #DC2626;
+    }
+
+    .toast.warning {
+      background-color: #f59e0b;
+    }
+
+    /* Login Styles */
+    .login-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f7f8f9;
+      background-image: 
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          #e5e7eb 2px,
+          #e5e7eb 4px
+        ),
+        repeating-linear-gradient(
+          60deg,
+          transparent,
+          transparent 2px,
+          #e5e7eb 2px,
+          #e5e7eb 4px
+        ),
+        repeating-linear-gradient(
+          120deg,
+          transparent,
+          transparent 2px,
+          #e5e7eb 2px,
+          #e5e7eb 4px
+        );
+    }
+
+    .login-form {
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e1e5e9;
+      border-radius: 6px;
+      font-size: 16px;
+      transition: border-color 0.3s ease;
+    }
+
+    .login-input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .login-button {
+      width: 100%;
+      padding: 12px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .login-button:hover {
+      background: #5a67d8;
+    }
+
+    .login-button:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .inactive-row {
+      opacity: 0.5;
+      background-color: #f3f4f6 !important;
+    }
+
+    .checkbox-list {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+    }
+
+    .checkbox-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+    }
+
+    .checkbox-item:last-child {
+      border-bottom: none;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      margin-right: 8px;
+      cursor: pointer;
+    }
+
+    .checkbox-item label {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 p-6">
+
+<!-- Login Seite -->
+<div id="loginPage" class="login-container">
+  <div class="login-form">
+    <div class="text-center mb-8">
+      <img src="The Deers Logo A4.svg" alt="Logo" class="h-20 w-auto mx-auto mb-4">
+      <h1 class="text-2xl font-bold text-gray-800">Mitgliederverwaltung</h1>
+      <h2 class="text-lg text-gray-600">The Deers - TSV Hirschaid</h2>
+    </div>
+    
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-700">E-Mail</label>
+        <input type="email" id="loginEmail" class="login-input" placeholder="E-Mail eingeben" required>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-700">Passwort</label>
+        <input type="password" id="loginPassword" class="login-input" placeholder="Passwort eingeben" required>
+      </div>
+      
+      <button type="submit" id="loginButton" class="login-button">Anmelden</button>
+      
+      <div id="loginError" class="text-red-600 text-sm text-center hidden mt-2"></div>
+    </form>
+	</div>
+</div>
+
+<!-- Haupt-App (wird nach Login angezeigt) -->
+<div id="mainApp" class="hidden">
+
+<!-- Kopfbereich mit Logo + Titel -->
+<div class="relative mb-8">
+  <!-- Logo responsive positioniert -->
+  <div class="absolute top-0 right-5">
+    <img src="The Deers Logo A4.svg" alt="Logo" class="h-44 w-auto">
+  </div>
+  <div class="text-center pr-0 sm:pr-48">
+    <h1 class="text-2xl sm:text-4xl font-bold text-gray-800 mb-2">Mitgliederverwaltung The Deers</h1>
+    <h2 class="text-xl sm:text-3xl text-gray-600">TSV Hirschaid</h2>
+  </div>
+</div>
+
+  <nav class="mb-6" align="center">
+  <button id="btn-members" onclick="showPage('members')" class="nav-btn bg-gray-400 text-white px-4 py-2 rounded mb-4 hover:bg-gray-400 font-bold" style="width: 150px;">Mitglieder</button>
+  <button id="btn-reports" onclick="showPage('reports')" class="nav-btn bg-gray-300 text-white px-4 py-2 rounded mb-4 hover:bg-gray-400 font-bold" style="width: 150px;">Auswertungen</button>
+  <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 font-bold" style="width: 150px;">Abmelden</button>
+</nav>
+
+<!-- Seite: Mitglieder -->
+<div id="page-members">
+  <!-- Button: Mitglied hinzufügen -->
+  <button id="btnNewMember" class="bg-green-600 text-white px-4 py-2 rounded mb-4 hover:bg-green-700">Mitglied hinzufügen</button>
+
+  <!-- Container für Mitgliederliste -->
+  <div id="membersContainer"></div>
+
+  <!-- Modal: Mitglied hinzufügen -->
+  <div id="modalAddMember" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-background">
+      <div class="modal-content">
+        <h2 class="text-xl font-bold mb-4">Mitglied hinzufügen</h2>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Name</label>
+          <input type="text" id="inputMemberName" class="border rounded w-full p-2" placeholder="Name eingeben" />
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Favoriten (max. 5)</label>
+          <div id="favoritesCheckboxList" class="checkbox-list">
+            <!-- Wird dynamisch befüllt -->
+          </div>
+          <div id="favoritesCount" class="text-sm text-gray-500 mt-2">0 / 5 ausgewählt</div>
+        </div>
+
+        <div class="flex justify-end space-x-2">
+          <button id="btnCancelMember" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+          <button id="btnSaveMember" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Buchung erfassen -->
+  <div id="modalAddBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto modal-background">
+      <div class="modal-content">
+        <h2 class="text-xl font-bold mb-4">Buchung erfassen</h2>
+        <p id="bookingMemberName" class="text-sm text-gray-600 mb-4"></p>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Getränke</label>
+          <div id="drinksList" class="checkbox-list">
+            <!-- Wird dynamisch befüllt -->
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Essen</label>
+          <div id="foodList" class="checkbox-list">
+            <!-- Wird dynamisch befüllt -->
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Betrag (€)</label>
+          <input type="number" id="bookingAmount" class="border rounded w-full p-2" step="0.01" min="0" placeholder="0.00" />
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Datum</label>
+          <input type="date" id="bookingDate" class="border rounded w-full p-2" />
+        </div>
+
+        <div class="flex justify-end space-x-2">
+          <button id="btnCancelBooking" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+          <button id="btnSaveBooking" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Verlauf anzeigen -->
+  <div id="modalHistory" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-background">
+      <div class="modal-content">
+        <h2 class="text-xl font-bold mb-4">Verlauf: <span id="historyMemberName"></span></h2>
+
+        <table class="w-full text-sm border-collapse">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2 border">Datum</th>
+              <th class="p-2 border">Betrag (€)</th>
+              <th class="p-2 border">Details</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <!-- Wird dynamisch befüllt -->
+          </tbody>
+        </table>
+
+        <div class="flex justify-end mt-4">
+          <button id="btnCloseHistory" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Bestätigung -->
+  <div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded w-full max-w-md">
+      <h2 class="text-xl font-bold mb-4">Bestätigung erforderlich</h2>
+      <p id="confirmMessage" class="mb-6 text-gray-700"></p>
+      <div class="flex justify-end space-x-2">
+        <button id="btnConfirmCancel" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+        <button id="btnConfirmOk" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Bestätigen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Seite: Auswertungen -->
+<div id="page-reports" class="hidden">
+  <h1 class="text-3xl font-bold mb-6">Auswertungen</h1>
+  
+  <div class="bg-white shadow rounded p-4 mb-6">
+    <p class="text-gray-500">Auswertungen werden noch implementiert.</p>
+  </div>
+</div>
+
+<script>
+// Globale Variablen
+let members = [];
+let articles = [
+  { name: 'Softdrink/Wasser', type: 'drink', price: 2.50 },
+  { name: 'Bier des Monats', type: 'drink', price: 3.50 },
+  { name: 'Krausenbier', type: 'drink', price: 3.00 },
+  { name: 'Weizen', type: 'drink', price: 3.50 },
+  { name: 'Winzerschorle', type: 'drink', price: 4.50 },
+  { name: 'Kaffee/Tee', type: 'drink', price: 1.50 },
+  { name: 'Cola', type: 'drink', price: 2.50 },
+  { name: 'Pizza', type: 'food', price: 9.00 },
+  { name: 'Chicken Nuggets', type: 'food', price: 5.00 },
+  { name: 'Chilli Cheese Nuggets', type: 'food', price: 5.00 },
+  { name: 'Riegel', type: 'food', price: 1.00 }
+];
+
+let currentMemberId = null;
+let selectedFavorites = [];
+let currentBookingMemberId = null;
+let confirmCallback = null;
+
+// Toast-Funktionen
+function showToast(message, type = 'success') {
+  const existingToasts = document.querySelectorAll('.toast');
+  existingToasts.forEach(toast => toast.remove());
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => toast.classList.add('show'), 100);
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// Bestätigung Modal
+function showConfirm(message, callback) {
+  document.getElementById('confirmMessage').textContent = message;
+  confirmCallback = callback;
+  document.getElementById('modalConfirm').classList.remove('hidden');
+}
+
+document.getElementById('btnConfirmCancel').addEventListener('click', () => {
+  document.getElementById('modalConfirm').classList.add('hidden');
+  confirmCallback = null;
+});
+
+document.getElementById('btnConfirmOk').addEventListener('click', () => {
+  if (confirmCallback) {
+    confirmCallback();
+    confirmCallback = null;
+  }
+  document.getElementById('modalConfirm').classList.add('hidden');
+});
+
+// Firebase Funktionen
+async function saveMemberToFirebase(memberData) {
+  try {
+    if (!window.firebaseDB) {
+      console.warn('Firebase nicht initialisiert');
+      return null;
+    }
+    
+    const docRef = await window.firebaseUtils.addDoc(
+      window.firebaseUtils.collection(window.firebaseDB, "mitglieder"), 
+      {
+        ...memberData,
+        createdAt: new Date().toISOString()
+      }
+    );
+    console.log("Mitglied in Firebase gespeichert mit ID: ", docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error("Fehler beim Speichern in Firebase: ", error);
+    return null;
+  }
+}
+
+async function updateMemberInFirebase(memberId, memberData) {
+  try {
+    if (!window.firebaseDB || !memberId) {
+      console.warn('Firebase nicht initialisiert oder keine Member-ID');
+      return false;
+    }
+    
+    const memberRef = window.firebaseUtils.doc(window.firebaseDB, "mitglieder", memberId);
+    await window.firebaseUtils.updateDoc(memberRef, {
+      ...memberData,
+      updatedAt: new Date().toISOString()
+    });
+    console.log("Mitglied in Firebase aktualisiert:", memberId);
+    return true;
+  } catch (error) {
+    console.error("Fehler beim Aktualisieren in Firebase: ", error);
+    return false;
+  }
+}
+
+async function loadMembersFromFirebase() {
+  try {
+    if (!window.firebaseDB) {
+      console.warn('Firebase nicht initialisiert');
+      return;
+    }
+    
+    const querySnapshot = await window.firebaseUtils.getDocs(
+      window.firebaseUtils.collection(window.firebaseDB, "mitglieder")
+    );
+    
+    members = [];
+    querySnapshot.forEach((doc) => {
+      members.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    renderMembers();
+  } catch (error) {
+    console.error("Fehler beim Laden aus Firebase: ", error);
+  }
+}
+
+// UI Funktionen
+function showPage(page) {
+  console.log('Zeige Seite:', page);
+  
+  const membersPage = document.getElementById('page-members');
+  const reportsPage = document.getElementById('page-reports');
+  
+  membersPage.classList.add('hidden');
+  reportsPage.classList.add('hidden');
+  
+  const currentPage = document.getElementById('page-' + page);
+  if (currentPage) {
+    currentPage.classList.remove('hidden');
+  }
+  
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.classList.remove('bg-gray-400');
+    btn.classList.add('bg-gray-300');
+  });
+  
+  const activeBtn = document.getElementById('btn-' + page);
+  if (activeBtn) {
+    activeBtn.classList.remove('bg-gray-300');
+    activeBtn.classList.add('bg-gray-400');
+  }
+}
+
+// Mitglied hinzufügen
+document.getElementById('btnNewMember').addEventListener('click', () => {
+  document.getElementById('inputMemberName').value = '';
+  selectedFavorites = [];
+  currentMemberId = null;
+  renderFavoritesCheckboxes();
+  document.getElementById('modalAddMember').classList.remove('hidden');
+});
+
+document.getElementById('btnCancelMember').addEventListener('click', () => {
+  document.getElementById('modalAddMember').classList.add('hidden');
+});
+
+function renderFavoritesCheckboxes() {
+  const container = document.getElementById('favoritesCheckboxList');
+  container.innerHTML = '';
+
+  articles.forEach((article, index) => {
+    const div = document.createElement('div');
+    div.className = 'checkbox-item';
+    const isSelected = selectedFavorites.includes(index);
+    
+    div.innerHTML = `
+      <input type="checkbox" id="fav-${index}" ${isSelected ? 'checked' : ''} />
+      <label for="fav-${index}">
+        ${article.name} (${article.price.toFixed(2)} €)
+      </label>
+    `;
+
+    const checkbox = div.querySelector('input[type="checkbox"]');
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked && selectedFavorites.length < 5) {
+        selectedFavorites.push(index);
+      } else {
+        selectedFavorites = selectedFavorites.filter(i => i !== index);
+      }
+      updateFavoritesCount();
+    });
+
+    container.appendChild(div);
+  });
+
+  updateFavoritesCount();
+}
+
+function updateFavoritesCount() {
+  document.getElementById('favoritesCount').textContent = `${selectedFavorites.length} / 5 ausgewählt`;
+}
+
+document.getElementById('btnSaveMember').addEventListener('click', async () => {
+  const name = document.getElementById('inputMemberName').value.trim();
+
+  if (!name) {
+    showToast('Bitte geben Sie einen Namen ein.', 'error');
+    return;
+  }
+
+  const favoriteArticles = selectedFavorites.map(i => articles[i]);
+
+  const memberData = {
+    name: name,
+    favorites: favoriteArticles,
+    isActive: true,
+    balance: 0.00,
+    bookings: []
+  };
+
+  const memberId = await saveMemberToFirebase(memberData);
+  if (memberId) {
+    memberData.id = memberId;
+    members.push(memberData);
+    renderMembers();
+    document.getElementById('modalAddMember').classList.add('hidden');
+    showToast('Mitglied erfolgreich hinzugefügt!');
+  } else {
+    showToast('Fehler beim Speichern des Mitglieds.', 'error');
+  }
+});
+
+// Mitgliederliste rendern
+function renderMembers() {
+  const container = document.getElementById('membersContainer');
+  
+  if (members.length === 0) {
+    container.innerHTML = '<p class="text-gray-500 text-center">Noch keine Mitglieder angelegt.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  const table = document.createElement('table');
+  table.className = 'w-full border-collapse bg-white shadow rounded overflow-hidden';
+  
+  table.innerHTML = `
+    <thead class="bg-gray-200">
+      <tr>
+        <th class="p-3 border text-left">Name</th>
+        <th class="p-3 border text-right">Ausstehend</th>
+        <th class="p-3 border text-center">Buchung hinzufügen</th>
+        <th class="p-3 border text-center">Historie</th>
+        <th class="p-3 border text-center">Aktion</th>
+      </tr>
+    </thead>
+    <tbody id="membersTableBody">
+    </tbody>
+  `;
+
+  container.appendChild(table);
+
+  const tbody = document.getElementById('membersTableBody');
+
+  members.forEach((member, index) => {
+    const row = document.createElement('tr');
+    const isInactive = !member.isActive;
+    
+    if (isInactive) {
+      row.classList.add('inactive-row');
+    }
+
+    const balance = (member.balance || 0).toFixed(2);
+
+    row.innerHTML = `
+      <td class="p-3 border">${member.name}</td>
+      <td class="p-3 border text-right">${balance} €</td>
+      <td class="p-3 border text-center">
+        ${!isInactive ? `
+          <button onclick="openBookingModal('${member.id}')" title="Buchung hinzufügen" class="text-lg hover:text-2xl">
+            🍔🍹
+          </button>
+        ` : '-'}
+      </td>
+      <td class="p-3 border text-center">
+        ${!isInactive ? `
+          <button onclick="openHistoryModal('${member.id}')" title="Verlauf anzeigen" class="text-lg hover:text-2xl">
+            📋
+          </button>
+        ` : '-'}
+      </td>
+      <td class="p-3 border text-center">
+        ${!isInactive ? `
+          <button onclick="deactivateMember('${member.id}')" title="Mitglied inaktivieren" class="text-lg hover:text-2xl text-red-600 hover:text-red-700">
+            ❌
+          </button>
+        ` : `
+          <button onclick="reactivateMember('${member.id}', ${parseFloat(balance) !== 0})" 
+                  title="${parseFloat(balance) !== 0 ? 'Kann nicht reaktiviert werden - Ausstehend ungleich 0€' : 'Mitglied reaktivieren'}"
+                  class="text-lg hover:text-2xl ${parseFloat(balance) !== 0 ? 'opacity-50 cursor-not-allowed' : 'text-green-600 hover:text-green-700'}"
+                  ${parseFloat(balance) !== 0 ? 'disabled' : ''}>
+            ♻️
+          </button>
+        `}
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+// Buchung erfassen Modal
+function openBookingModal(memberId) {
+  currentBookingMemberId = memberId;
+  const member = members.find(m => m.id === memberId);
+  
+  if (!member) return;
+
+  document.getElementById('bookingMemberName').textContent = `Buchung für: ${member.name}`;
+  document.getElementById('bookingAmount').value = '0.00';
+  document.getElementById('bookingDate').value = new Date().toISOString().split('T')[0];
+
+  renderArticlesList('drinksList', 'drink');
+  renderArticlesList('foodList', 'food');
+
+  document.getElementById('modalAddBooking').classList.remove('hidden');
+}
+
+function renderArticlesList(containerId, type) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  articles.filter(a => a.type === type).forEach((article) => {
+    const div = document.createElement('div');
+    div.className = 'checkbox-item';
+    div.innerHTML = `
+      <input type="checkbox" id="article-${article.name}" />
+      <label for="article-${article.name}">
+        ${article.name} (${article.price.toFixed(2)} €)
+      </label>
+    `;
+    container.appendChild(div);
+  });
+}
+
+document.getElementById('btnCancelBooking').addEventListener('click', () => {
+  document.getElementById('modalAddBooking').classList.add('hidden');
+  currentBookingMemberId = null;
+});
+
+document.getElementById('btnSaveBooking').addEventListener('click', async () => {
+  if (!currentBookingMemberId) return;
+
+  const member = members.find(m => m.id === currentBookingMemberId);
+  if (!member) return;
+
+  const amount = parseFloat(document.getElementById('bookingAmount').value) || 0;
+  const date = document.getElementById('bookingDate').value;
+
+  if (amount <= 0) {
+    showToast('Bitte geben Sie einen Betrag ein.', 'error');
+    return;
+  }
+
+  if (!date) {
+    showToast('Bitte wählen Sie ein Datum.', 'error');
+    return;
+  }
+
+  // Getränke sammeln
+  const selectedDrinks = [];
+  document.querySelectorAll('#drinksList input[type="checkbox"]:checked').forEach(checkbox => {
+    const label = checkbox.nextElementSibling.textContent;
+    selectedDrinks.push(label.split('(')[0].trim());
+  });
+
+  // Essen sammeln
+  const selectedFood = [];
+  document.querySelectorAll('#foodList input[type="checkbox"]:checked').forEach(checkbox => {
+    const label = checkbox.nextElementSibling.textContent;
+    selectedFood.push(label.split('(')[0].trim());
+  });
+
+  const booking = {
+    date: date,
+    amount: amount,
+    drinks: selectedDrinks,
+    food: selectedFood,
+    createdAt: new Date().toISOString()
+  };
+
+  // Aktualisiere Mitglied
+  if (!member.bookings) {
+    member.bookings = [];
+  }
+  member.bookings.push(booking);
+  member.balance = (member.balance || 0) + amount;
+
+  const success = await updateMemberInFirebase(currentBookingMemberId, {
+    bookings: member.bookings,
+    balance: member.balance
+  });
+
+  if (success) {
+    renderMembers();
+    document.getElementById('modalAddBooking').classList.add('hidden');
+    currentBookingMemberId = null;
+    showToast('Buchung erfolgreich hinzugefügt!');
+  } else {
+    showToast('Fehler beim Speichern der Buchung.', 'error');
+  }
+});
+
+// Historia Modal öffnen
+function openHistoryModal(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+
+  document.getElementById('historyMemberName').textContent = member.name;
+  const tbody = document.getElementById('historyTableBody');
+  tbody.innerHTML = '';
+
+  if (!member.bookings || member.bookings.length === 0) {
+    tbody.innerHTML = '<tr><td class="p-2 border text-center" colspan="3">Keine Buchungen vorhanden.</td></tr>';
+  } else {
+    member.bookings.forEach(booking => {
+      const row = document.createElement('tr');
+      const details = [];
+      if (booking.drinks && booking.drinks.length > 0) {
+        details.push('Getränke: ' + booking.drinks.join(', '));
+      }
+      if (booking.food && booking.food.length > 0) {
+        details.push('Essen: ' + booking.food.join(', '));
+      }
+      
+      row.innerHTML = `
+        <td class="p-2 border">${new Date(booking.date).toLocaleDateString('de-DE')}</td>
+        <td class="p-2 border text-right">${booking.amount.toFixed(2)} €</td>
+        <td class="p-2 border">${details.length > 0 ? details.join(' | ') : '-'}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  document.getElementById('modalHistory').classList.remove('hidden');
+}
+
+document.getElementById('btnCloseHistory').addEventListener('click', () => {
+  document.getElementById('modalHistory').classList.add('hidden');
+});
+
+// Mitglied inaktivieren
+function deactivateMember(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+
+  showConfirm(`Möchten Sie ${member.name} wirklich inaktivieren? Das Mitglied wird grau angezeigt und kann nicht mehr bearbeitet werden.`, () => {
+    member.isActive = false;
+    updateMemberInFirebase(memberId, { isActive: false }).then(() => {
+      renderMembers();
+      showToast('Mitglied inaktiviert.');
+    });
+  });
+}
+
+// Mitglied reaktivieren
+function reactivateMember(memberId, hasBalance) {
+  if (hasBalance) {
+    showToast('Mitglied kann nicht reaktiviert werden - Ausstehend ungleich 0,00 €', 'warning');
+    return;
+  }
+
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+
+  showConfirm(`Möchten Sie ${member.name} reaktivieren?`, () => {
+    member.isActive = true;
+    updateMemberInFirebase(memberId, { isActive: true }).then(() => {
+      renderMembers();
+      showToast('Mitglied reaktiviert.');
+    });
+  });
+}
+
+// Hilfsfunktion zum Runden
+function round2(num) {
+  return Math.round(num * 100) / 100;
+}
+
+// Login-Funktionalität
+async function authenticateUser(email, password) {
+  try {
+    if (!window.firebaseAuth) {
+      console.error('Firebase Auth nicht initialisiert');
+      return false;
+    }
+
+    const userCredential = await window.authUtils.signInWithEmailAndPassword(
+      window.firebaseAuth, 
+      email, 
+      password
+    );
+    
+    console.log('Benutzer erfolgreich angemeldet:', userCredential.user);
+    return userCredential.user;
+  } catch (error) {
+    console.error("Fehler bei der Authentifizierung: ", error);
+    
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      throw new Error('Ungültige E-Mail oder Passwort');
+    } else if (error.code === 'auth/invalid-email') {
+      throw new Error('Ungültige E-Mail-Adresse');
+    } else {
+      throw new Error('Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    }
+  }
+}
+
+// Logout
+async function logout() {
+  try {
+    await window.authUtils.signOut(window.firebaseAuth);
+    showToast('Erfolgreich abgemeldet.');
+  } catch (error) {
+    console.error('Logout-Fehler:', error);
+    showToast('Fehler beim Abmelden.', 'error');
+  }
+}
+
+// Login-Event
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const loginButton = document.getElementById('loginButton');
+  const loginError = document.getElementById('loginError');
+  
+  if (!email || !password) {
+    loginError.textContent = 'Bitte füllen Sie alle Felder aus.';
+    loginError.classList.remove('hidden');
+    return;
+  }
+
+  loginButton.disabled = true;
+  loginButton.textContent = 'Anmelden...';
+  loginError.classList.add('hidden');
+  
+  try {
+    if (!window.firebaseReady) {
+      await new Promise(resolve => {
+        if (window.firebaseReady) {
+          resolve();
+        } else {
+          window.addEventListener('firebaseReady', resolve, { once: true });
+          setTimeout(resolve, 3000);
+        }
+      });
+    }
+    
+    const user = await authenticateUser(email, password);
+    
+    if (user) {
+      isLoggedIn = true;
+      currentUser = user;
+      
+      sessionStorage.setItem('isLoggedIn', 'true');
+      sessionStorage.setItem('currentUser', JSON.stringify(user));
+      
+      document.getElementById('loginPage').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
+      
+      await loadMembersFromFirebase();
+      
+      showToast('Erfolgreich angemeldet!');
+    }
+  } catch (error) {
+    console.error('Login-Fehler:', error);
+    loginError.textContent = error.message || 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';
+    loginError.classList.remove('hidden');
+  } finally {
+    loginButton.disabled = false;
+    loginButton.textContent = 'Anmelden';
+  }
+});
+
+// Globale Funktionen für HTML-Events
+window.showPage = showPage;
+window.openBookingModal = openBookingModal;
+window.openHistoryModal = openHistoryModal;
+window.deactivateMember = deactivateMember;
+window.reactivateMember = reactivateMember;
+window.logout = logout;
+
+// Session-Check beim Laden
+window.addEventListener('load', () => {
+  console.log('Seite geladen');
+  
+  // Wenn Firebase bereit ist, lade Mitglieder
+  if (window.firebaseReady) {
+    console.log('Firebase ist bereit');
+    loadMembersFromFirebase();
+  } else {
+    window.addEventListener('firebaseReady', () => {
+      console.log('Firebase Ready Event empfangen');
+      loadMembersFromFirebase();
+    }, { once: true });
+  }
+});
+
+// Modal-Hintergrund-Klicks zum Schließen
+document.addEventListener('click', (e) => {
+  // Schließe modalAddMember wenn auf Hintergrund geklickt wird
+  const modalMember = document.getElementById('modalAddMember');
+  if (e.target === modalMember) {
+    modalMember.classList.add('hidden');
+  }
+
+  // Schließe modalAddBooking wenn auf Hintergrund geklickt wird
+  const modalBooking = document.getElementById('modalAddBooking');
+  if (e.target === modalBooking) {
+    modalBooking.classList.add('hidden');
+  }
+
+  // Schließe modalHistory wenn auf Hintergrund geklickt wird
+  const modalHistory = document.getElementById('modalHistory');
+  if (e.target === modalHistory) {
+    modalHistory.classList.add('hidden');
+  }
+
+  // Schließe modalConfirm wenn auf Hintergrund geklickt wird
+  const modalConfirm = document.getElementById('modalConfirm');
+  if (e.target === modalConfirm) {
+    modalConfirm.classList.add('hidden');
+    confirmCallback = null;
+  }
+});
+
+// Keyboard-Shortcuts
+document.addEventListener('keydown', (e) => {
+  // ESC zum Schließen von Modals
+  if (e.key === 'Escape') {
+    document.getElementById('modalAddMember').classList.add('hidden');
+    document.getElementById('modalAddBooking').classList.add('hidden');
+    document.getElementById('modalHistory').classList.add('hidden');
+    document.getElementById('modalConfirm').classList.add('hidden');
+    confirmCallback = null;
+    currentBookingMemberId = null;
+  }
+});
+
+// Initialisierungsvariablen für Login
+let isLoggedIn = false;
+let currentUser = null;
+
+
+</script>
+
+</body>
+</html>

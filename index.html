@@ -1420,8 +1420,8 @@ if (spiel.gaeste && spiel.gaeste.length > 0) {
     
     // Setze die Attribute mit den gespeicherten Werten
     // Wichtig: Als String speichern, nicht nur wenn vorhanden
-    lastRow.setAttribute('data-getraenke', gast.getraenke || '{}');
-    lastRow.setAttribute('data-essen', gast.essen || '{}');
+    lastRow.setAttribute('data-getraenke', gast.getraenke || '0.00');
+    lastRow.setAttribute('data-essen', gast.essen || '0.00');
     lastRow.setAttribute('data-tip', gast.tip || '0.00');
     
     updateGesamtbetrag(lastRow);
