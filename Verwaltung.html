@@ -584,7 +584,7 @@ const ARTICLES = [
 ];
 
 // Abrechnungen erst ab dieser KW zulassen (Format: { week, year })
-const ABRECHNUNG_START = { week: 12, year: 2026 };
+const ABRECHNUNG_START = { week: 11, year: 2026 };
 
 
 const guestDrinkList = ARTICLES.filter(a => a.type === 'drink' && !a.legacyAlias).map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
