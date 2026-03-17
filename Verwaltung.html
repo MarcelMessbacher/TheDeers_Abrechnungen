@@ -1016,6 +1016,7 @@ async function openEditBookingModal(bookingId) {
   buildArtGrid('ebDrinksGrid','drink',editBookingQty,'eb',changeEbQty);
   buildArtGrid('ebFoodGrid','food',editBookingQty,'eb',changeEbQty);
   updateEbSums(); switchEbTab('ebDrinks');
+  document.getElementById('modalHistory').classList.add('hidden');
   document.getElementById('modalEditBooking').classList.remove('hidden');
 }
 window.openEditBookingModal=openEditBookingModal;
