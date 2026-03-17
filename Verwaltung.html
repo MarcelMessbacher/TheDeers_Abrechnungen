@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>Verwaltung The Deers – TSV Hirschaid</title>
   <link rel="icon" type="image/svg" href="The Deers Logo nur Hirsch.svg">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -37,7 +37,6 @@
       if (user) {
         document.getElementById('loginPage').classList.add('hidden');
         document.getElementById('mainApp').classList.remove('hidden');
-        // Fire event so the main script can react once it's loaded
         window.dispatchEvent(new CustomEvent('userLoggedIn'));
       } else {
         document.getElementById('loginPage').classList.remove('hidden');
@@ -57,7 +56,7 @@
     .toast { position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
       background:#16A34A;color:#fff;padding:12px 24px;border-radius:8px;
       box-shadow:0 4px 12px rgba(0,0,0,.15);font-weight:500;z-index:9999;
-      opacity:0;transition:opacity .3s;max-width:500px;text-align:center; }
+      opacity:0;transition:opacity .3s;max-width:90vw;text-align:center; }
     .toast.show { opacity:1; }
     .toast.error   { background:#DC2626; }
     .toast.warning { background:#f59e0b; }
@@ -82,7 +81,7 @@
     .bal-pos  { color:#dc2626;font-weight:600; }
     .bal-zero { color:#16a34a;font-weight:600; }
 
-    .art-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px; }
+    .art-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px; }
     .art-card { border:2px solid #e5e7eb;border-radius:8px;padding:10px;background:#fff;transition:all .15s; }
     .art-card:hover   { border-color:#6b7280;background:#f9fafb; }
     .art-card.selected{ border-color:#16a34a;background:#f0fdf4; }
@@ -95,9 +94,33 @@
     .tab-btn { transition:all .2s; }
     .tab-btn.active    { border-bottom:3px solid #374151;font-weight:700;color:#111827; }
     .tab-btn:not(.active){ color:#6b7280;border-bottom:3px solid transparent; }
+
+    /* ── Responsive nav buttons ── */
+    .nav-btn { width: 100%; }
+
+    /* ── Table scroll wrapper ── */
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
+    .table-scroll table { min-width: 600px; }
+
+    /* ── Page wrapper: consistent max-width ── */
+    .page-wrap { width: 100%; }
+
+    /* ── Header layout ── */
+    .app-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 1.25rem;
+      gap: 0.75rem;
+    }
+    .app-header img {
+      height: 7rem;
+      width: auto;
+    }
   </style>
 </head>
-<body class="bg-gray-100 p-6">
+<body class="bg-gray-100 p-3 sm:p-6">
 
 <!-- ═══════════ LOGIN ═══════════ -->
 <div id="loginPage" class="login-wrap">
@@ -125,28 +148,28 @@
 <!-- ═══════════ HAUPT-APP ═══════════ -->
 <div id="mainApp" class="hidden">
 
-  <!-- Header -->
-  <div class="relative mb-8">
-    <div class="absolute top-0 right-5">
-      <img src="The Deers Logo A4.svg" alt="Logo" class="h-44 w-auto">
-    </div>
-    <div class="text-center pr-0 sm:pr-48">
-      <h1 class="text-2xl sm:text-4xl font-bold text-gray-800 mb-2">Dartabteilung – The Deers</h1>
+  <!-- Header: Titel + Logo gestapelt, dann Nav-Buttons -->
+  <div class="app-header">
+    <div>
+      <h1 class="text-2xl sm:text-4xl font-bold text-gray-800 mb-1">Dartabteilung – The Deers</h1>
       <h2 class="text-xl sm:text-3xl text-gray-600">TSV Hirschaid</h2>
     </div>
+    <img src="The Deers Logo A4.svg" alt="Logo">
   </div>
 
   <!-- Navigation -->
-  <nav class="mb-6 text-center flex flex-wrap justify-center gap-2">
-    <button id="btn-members"  onclick="showPage('members')"  class="nav-btn bg-gray-400 text-white px-4 py-2 rounded font-bold hover:bg-gray-500" style="min-width:150px">Mitglieder</button>
-    <button id="btn-games"    onclick="showPage('games')"    class="nav-btn bg-gray-300 text-white px-4 py-2 rounded font-bold hover:bg-gray-400" style="min-width:150px">Heimspiele</button>
-    <button id="btn-reports"  onclick="showPage('reports')"  class="nav-btn bg-gray-300 text-white px-4 py-2 rounded font-bold hover:bg-gray-400" style="min-width:150px">Auswertungen</button>
-    <button onclick="doLogout()" class="bg-red-500 text-white px-4 py-2 rounded font-bold hover:bg-red-600" style="min-width:150px">Abmelden</button>
+  <nav class="mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <button id="btn-members"  onclick="showPage('members')"  class="nav-btn bg-gray-400 text-white px-4 py-3 rounded font-bold hover:bg-gray-500 text-sm sm:text-base">Mitglieder</button>
+      <button id="btn-games"    onclick="showPage('games')"    class="nav-btn bg-gray-300 text-white px-4 py-3 rounded font-bold hover:bg-gray-400 text-sm sm:text-base">Heimspiele</button>
+      <button id="btn-reports"  onclick="showPage('reports')"  class="nav-btn bg-gray-300 text-white px-4 py-3 rounded font-bold hover:bg-gray-400 text-sm sm:text-base">Auswertungen</button>
+      <button onclick="doLogout()" class="nav-btn bg-red-500 text-white px-4 py-3 rounded font-bold hover:bg-red-600 text-sm sm:text-base">Abmelden</button>
+    </div>
   </nav>
 
   <!-- ═══════════ SEITE: MITGLIEDER ═══════════ -->
-  <div id="page-members">
-    <div class="flex items-center gap-3 mb-4">
+  <div id="page-members" class="page-wrap">
+    <div class="flex flex-wrap items-center gap-3 mb-4">
       <button id="btnNewMember" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-semibold">Mitglied hinzufügen</button>
       <span id="memberCountLabel" class="text-sm text-gray-500"></span>
     </div>
@@ -154,18 +177,18 @@
       <span class="text-sm text-gray-500 font-medium">Ausstehende Beträge:</span>
       <span id="totalBalanceDisplay" class="text-xl font-bold text-red-600">0,00 €</span>
     </div>
-    <div id="membersContainer"><p class="text-gray-400 text-center mt-8">Lade…</p></div>
+    <div id="membersContainer" class="table-scroll"><p class="text-gray-400 text-center mt-8">Lade…</p></div>
   </div>
 
   <!-- ═══════════ SEITE: HEIMSPIELE ═══════════ -->
-  <div id="page-games" class="hidden">
+  <div id="page-games" class="hidden page-wrap">
     <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4 hover:bg-green-700 font-semibold">Neues Heimspiel</button>
     <div id="gamesContainer"></div>
   </div>
 
   <!-- ═══════════ SEITE: AUSWERTUNGEN ═══════════ -->
-  <div id="page-reports" class="hidden">
-    <h1 class="text-3xl font-bold mb-4">Auswertungen</h1>
+  <div id="page-reports" class="hidden page-wrap">
+    <h1 class="text-2xl sm:text-3xl font-bold mb-4">Auswertungen</h1>
 
     <!-- Sub-tabs -->
     <div class="flex gap-1 mb-6 border-b">
@@ -187,7 +210,7 @@
 
     <!-- Mitglieder-Auswertung -->
     <div id="report-members-wrap">
-      <div class="bg-white shadow rounded overflow-x-auto mb-6">
+      <div class="table-scroll bg-white shadow rounded mb-6">
         <table id="tblMemberReport" class="min-w-full border">
           <thead class="bg-gray-200">
             <tr>
@@ -223,7 +246,7 @@
 
     <!-- Heimspiele-Auswertung -->
     <div id="report-games-wrap" class="hidden">
-      <div class="bg-white shadow rounded overflow-x-auto mb-6">
+      <div class="table-scroll bg-white shadow rounded mb-6">
         <table id="tblGameReport" class="min-w-full border">
           <thead class="bg-gray-200">
             <tr>
@@ -263,7 +286,7 @@
 ════════════════════════════════════════════════ -->
 
 <!-- Modal: Mitglied anlegen/bearbeiten -->
-<div id="modalMember" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalMember" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
       <h2 id="mbrModalTitle" class="text-xl font-bold mb-4">Mitglied anlegen</h2>
@@ -290,7 +313,7 @@
 </div>
 
 <!-- Modal: Buchung erfassen -->
-<div id="modalBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchung erfassen</h2>
@@ -320,7 +343,7 @@
 </div>
 
 <!-- Modal: Buchung bearbeiten -->
-<div id="modalEditBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalEditBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchung bearbeiten</h2>
@@ -345,23 +368,25 @@
 </div>
 
 <!-- Modal: Verlauf -->
-<div id="modalHistory" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalHistory" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-3xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchungsverlauf</h2>
       <p id="histLabel" class="text-sm text-gray-500 mb-4"></p>
-      <table class="w-full text-sm border-collapse">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="p-2 border text-left">Datum</th>
-            <th class="p-2 border text-left">Artikel</th>
-            <th class="p-2 border text-right">Betrag</th>
-            <th class="p-2 border text-center">Status</th>
-            <th class="p-2 border text-center">Aktion</th>
-          </tr>
-        </thead>
-        <tbody id="histBody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="w-full text-sm border-collapse" style="min-width:480px">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2 border text-left">Datum</th>
+              <th class="p-2 border text-left">Artikel</th>
+              <th class="p-2 border text-right">Betrag</th>
+              <th class="p-2 border text-center">Status</th>
+              <th class="p-2 border text-center">Aktion</th>
+            </tr>
+          </thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </div>
       <div class="mt-4 text-right text-sm">
         Offener Saldo: <span id="histBalance" class="font-bold text-red-600"></span>
       </div>
@@ -373,7 +398,7 @@
 </div>
 
 <!-- Modal: Abrechnen (Mitglied bezahlt) -->
-<div id="modalSettle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalSettle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md modal-bg">
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Abrechnung</h2>
@@ -404,7 +429,7 @@
 ════════════════════════════════════════════════ -->
 
 <!-- Modal: Spiel -->
-<div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-4">Heimspiel</h2>
@@ -426,19 +451,21 @@
           <input type="date" id="gDate" class="border rounded w-44 p-2">
         </div>
       </div>
-      <table class="w-full text-sm mb-4" id="guestTable">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="p-2 border">Name</th>
-            <th class="p-2 border">Getränke</th>
-            <th class="p-2 border">Essen</th>
-            <th class="p-2 border text-right">Gesamt</th>
-            <th class="p-2 border text-center">Abrechnung</th>
-            <th class="p-2 border text-center">Aktion</th>
-          </tr>
-        </thead>
-        <tbody id="guestTableBody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="w-full text-sm mb-4" id="guestTable" style="min-width:500px">
+          <thead class="bg-gray-200">
+            <tr>
+              <th class="p-2 border">Name</th>
+              <th class="p-2 border">Getränke</th>
+              <th class="p-2 border">Essen</th>
+              <th class="p-2 border text-right">Gesamt</th>
+              <th class="p-2 border text-center">Abrechnung</th>
+              <th class="p-2 border text-center">Aktion</th>
+            </tr>
+          </thead>
+          <tbody id="guestTableBody"></tbody>
+        </table>
+      </div>
       <button id="btnAddGuestRow" class="text-blue-600 mb-4 hover:text-blue-800">+ Gast hinzufügen</button>
       <div class="flex justify-end gap-2">
         <button id="btnFinalizeGame" class="bg-gray-400 text-white px-4 py-2 rounded cursor-not-allowed" disabled>Spiel abrechnen</button>
@@ -450,13 +477,15 @@
 </div>
 
 <!-- Modal: Getränke (Gast) -->
-<div id="modalGuestDrinks" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalGuestDrinks" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-4">Getränke</h2>
-    <table class="w-full text-sm mb-4">
-      <thead class="bg-gray-200"><tr><th class="p-2 border">Name</th><th class="p-2 border">Preis</th><th class="p-2 border">Anzahl</th><th class="p-2 border">Summe</th></tr></thead>
-      <tbody id="gDrinksBody"></tbody>
-    </table>
+    <div class="table-scroll">
+      <table class="w-full text-sm mb-4" style="min-width:360px">
+        <thead class="bg-gray-200"><tr><th class="p-2 border">Name</th><th class="p-2 border">Preis</th><th class="p-2 border">Anzahl</th><th class="p-2 border">Summe</th></tr></thead>
+        <tbody id="gDrinksBody"></tbody>
+      </table>
+    </div>
     <div class="mb-4 font-semibold">Summe: <span id="gDrinksSum">0,00</span> €</div>
     <div class="flex justify-end gap-2">
       <button id="btnSaveGDrinks"  class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
@@ -466,13 +495,15 @@
 </div>
 
 <!-- Modal: Essen (Gast) -->
-<div id="modalGuestFood" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalGuestFood" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-4">Essen</h2>
-    <table class="w-full text-sm mb-4">
-      <thead class="bg-gray-200"><tr><th class="p-2 border">Name</th><th class="p-2 border">Preis</th><th class="p-2 border">Anzahl</th><th class="p-2 border">Summe</th></tr></thead>
-      <tbody id="gFoodBody"></tbody>
-    </table>
+    <div class="table-scroll">
+      <table class="w-full text-sm mb-4" style="min-width:360px">
+        <thead class="bg-gray-200"><tr><th class="p-2 border">Name</th><th class="p-2 border">Preis</th><th class="p-2 border">Anzahl</th><th class="p-2 border">Summe</th></tr></thead>
+        <tbody id="gFoodBody"></tbody>
+      </table>
+    </div>
     <div class="mb-4 font-semibold">Summe: <span id="gFoodSum">0,00</span> €</div>
     <div class="flex justify-end gap-2">
       <button id="btnSaveGFood"  class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
@@ -482,7 +513,7 @@
 </div>
 
 <!-- Modal: Gast-Abrechnung -->
-<div id="modalGuestSettle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalGuestSettle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-4">Abrechnung</h2>
     <div id="gSettleContent"></div>
@@ -510,7 +541,7 @@
 ════════════════════════════════════════════════ -->
 
 <!-- Modal: Wochendetails -->
-<div id="modalWeekDetails" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalWeekDetails" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-1">Details: <span id="wkDetailTitle"></span></h2>
     <div id="wkDetailContent" class="mt-3"></div>
@@ -521,7 +552,7 @@
 </div>
 
 <!-- Modal: Abrechnung erstellen (KW wählen) -->
-<div id="modalCreateAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalCreateAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md">
     <h2 class="text-xl font-bold mb-4">Abrechnung erstellen</h2>
     <p class="text-sm text-gray-600 mb-4">Wähle die Kalenderwoche, für die eine Abrechnung erstellt werden soll. Bereits abgerechnete Kalenderwochen sind nicht auswählbar.</p>
@@ -545,7 +576,7 @@
 </div>
 
 <!-- Modal: Bestätigung -->
-<div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md">
     <h2 class="text-xl font-bold mb-4">Bestätigung erforderlich</h2>
     <p id="confirmMsg" class="mb-6 text-gray-700"></p>
@@ -561,12 +592,9 @@
 ════════════════════════════════════════════════ -->
 <script>
 // ══════════════════════════════════════════════════════════════
-// ARTIKEL-LISTE  –  buyPrice, memberPrice (VK Mitglieder), guestPrice (VK Gäste)
-// Preise hier im Code ändern
-// WICHTIG: name muss exakt dem gespeicherten Namen in der DB entsprechen
+// ARTIKEL-LISTE
 // ══════════════════════════════════════════════════════════════
 const ARTICLES = [
-  // Getränke – Namen exakt wie in index.html gespeichert
   { id:'g1', name:'Softdrink/Wasser',         type:'drink', buyPrice:2.00, memberPrice:2.00, guestPrice:2.50 },
   { id:'g2', name:'Bier des Monats',          type:'drink', buyPrice:2.20, memberPrice:2.20, guestPrice:3.50 },
   { id:'g3', name:'Krausenbier',              type:'drink', buyPrice:2.20, memberPrice:2.20, guestPrice:3.00 },
@@ -574,7 +602,6 @@ const ARTICLES = [
   { id:'g5', name:'Winzerschorle',            type:'drink', buyPrice:1.40, memberPrice:3.00, guestPrice:4.50 },
   { id:'g6', name:'Kaffee/Tee',               type:'drink', buyPrice:0.30, memberPrice:1.50, guestPrice:1.50 },
   { id:'g7', name:'Cola',                     type:'drink', buyPrice:0.80, memberPrice:2.50, guestPrice:2.50 },
-  // Essen
   { id:'e1', name:'Pizza',                    type:'food',  buyPrice:4.80, memberPrice:5.50, guestPrice:9.00 },
   { id:'e2', name:'1/2 Pizza',                type:'food',  buyPrice:2.40, memberPrice:2.80, guestPrice:4.50, guestDisabled:true },
   { id:'e3', name:'Chicken Nuggets',          type:'food',  buyPrice:2.30, memberPrice:3.50, guestPrice:5.00 },
@@ -583,9 +610,7 @@ const ARTICLES = [
   { id:'e6', name:'Belegte Brötchen',         type:'food',  buyPrice:1.40, memberPrice:2.50, guestPrice:2.50 },
 ];
 
-// Abrechnungen erst ab dieser KW zulassen (Format: { week, year })
 const ABRECHNUNG_START = { week: 11, year: 2026 };
-
 
 const guestDrinkList = ARTICLES.filter(a => a.type === 'drink' && !a.legacyAlias).map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
 const guestFoodList  = ARTICLES.filter(a => a.type === 'food'  && !a.legacyAlias).map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
@@ -604,11 +629,11 @@ let historyMemberId     = null;
 let settleMemberId      = null;
 let confirmCb           = null;
 let editGameIdx         = null;
-let activeGuestRow      = null;  // for drinks/food/settle modals
-let activeGuestRowType  = null;  // 'drinks'|'food'|'settle'
+let activeGuestRow      = null;
+let activeGuestRowType  = null;
 let reportData          = { member:{}, game:{} };
 let currentReportTab    = 'members';
-let abrechnungen        = {};    // weekKey → { pdfData, createdAt }
+let abrechnungen        = {};
 
 // ══════════════════════════════════════════════════════════════
 // HELPERS
@@ -621,25 +646,21 @@ const esc   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 
 function getISOWeek(date) {
   const t = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const day = t.getUTCDay() || 7; // Mon=1 … Sun=7
-  t.setUTCDate(t.getUTCDate() + 4 - day); // nearest Thursday
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
   const week = Math.ceil((((t - yearStart) / 86400000) + 1) / 7);
   return { week, isoYear: t.getUTCFullYear() };
 }
 function kwRange(week, isoYear) {
-  // ISO week 1 contains the first Thursday of the year.
-  // Find Monday of that week.
-  const jan4 = new Date(Date.UTC(isoYear, 0, 4)); // Jan 4 is always in week 1
-  const dayOfWeek = jan4.getUTCDay() || 7;        // Mon=1…Sun=7
+  const jan4 = new Date(Date.UTC(isoYear, 0, 4));
+  const dayOfWeek = jan4.getUTCDay() || 7;
   const mondayW1 = new Date(jan4);
   mondayW1.setUTCDate(jan4.getUTCDate() - (dayOfWeek - 1));
-
   const start = new Date(mondayW1);
   start.setUTCDate(mondayW1.getUTCDate() + (week - 1) * 7);
   const end = new Date(start);
   end.setUTCDate(start.getUTCDate() + 6);
-
   const fmt = d => `${String(d.getUTCDate()).padStart(2,'0')}.${String(d.getUTCMonth()+1).padStart(2,'0')}.${d.getUTCFullYear()}`;
   const iso = d => d.toISOString().split('T')[0];
   return { start: iso(start), end: iso(end), label: `${fmt(start)}–${fmt(end)}` };
@@ -762,20 +783,24 @@ function renderMembers() {
   if(members.length===0){ c.innerHTML='<p class="text-gray-400 text-center mt-8">Noch keine Mitglieder angelegt.</p>'; return; }
 
   c.innerHTML='';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'table-scroll';
   const tbl = document.createElement('table');
   tbl.className='w-full border-collapse bg-white shadow rounded overflow-hidden';
+  tbl.style.minWidth = '600px';
   tbl.innerHTML=`
     <thead class="bg-gray-200"><tr>
       <th class="p-3 border text-left">Name</th>
-      <th class="p-3 border text-left">Lieblingsgetränk</th>
-      <th class="p-3 border text-right">Offener Saldo</th>
       <th class="p-3 border text-center">Buchen</th>
+      <th class="p-3 border text-left">Favorit</th>
+      <th class="p-3 border text-right">Offener Saldo</th>
       <th class="p-3 border text-center">Abrechnen</th>
       <th class="p-3 border text-center">Verlauf</th>
       <th class="p-3 border text-center">Aktion</th>
     </tr></thead>
     <tbody id="membersTbody"></tbody>`;
-  c.appendChild(tbl);
+  wrapper.appendChild(tbl);
+  c.appendChild(wrapper);
   const tbody = document.getElementById('membersTbody');
 
   [...active,...inactive].forEach(m => {
@@ -787,16 +812,16 @@ function renderMembers() {
     if(inactive) row.classList.add('inactive-row');
     row.innerHTML=`
       <td class="p-3 border font-medium">${esc(dn)}</td>
+      <td class="p-3 border text-center">
+        ${!inactive?`<button onclick="openBookingModal('${m.id}')"
+          class="bg-gray-700 hover:bg-gray-900 text-white text-xs font-bold px-3 py-1 rounded">+ Buchen</button>`:'–'}
+      </td>
       <td class="p-3 border text-gray-600 text-sm">
         ${esc(pd)}
         ${!inactive&&m.preference_drink?`<button onclick="quickFav('${m.id}')" title="Lieblingsgetränk +1"
           class="ml-1 bg-green-100 hover:bg-green-200 border border-green-400 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">+1</button>`:''}
       </td>
       <td class="p-3 border text-right"><span class="${bal>0?'bal-pos':'bal-zero'}">${fEuro(bal)}</span></td>
-      <td class="p-3 border text-center">
-        ${!inactive?`<button onclick="openBookingModal('${m.id}')"
-          class="bg-gray-700 hover:bg-gray-900 text-white text-xs font-bold px-3 py-1 rounded">+ Buchen</button>`:'–'}
-      </td>
       <td class="p-3 border text-center">
         ${!inactive&&bal>0?`<button onclick="openSettleModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">💰</button>`
           :(!inactive?'<span class="text-green-500 text-xs">✓ beglichen</span>':'–')}
@@ -1133,11 +1158,11 @@ function renderGames() {
     div.className='bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md';
     div.innerHTML=`
       <div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <strong>${esc(g.team||'')}</strong><span class="text-gray-400">vs</span>
           <span>${esc(g.opponent||'')}</span>${icon}
         </div>
-        <div class="flex items-center gap-3 mt-1">
+        <div class="flex items-center gap-3 mt-1 flex-wrap">
           <span class="text-sm text-gray-500">${fDate(g.date)}</span>
           <span class="text-sm text-gray-500">(${g.gaeste?g.gaeste.length:0} Gäste)</span>
           ${statusTxt}
@@ -1434,12 +1459,10 @@ window.deleteGame=deleteGame;
 // AUSWERTUNGEN
 // ══════════════════════════════════════════════════════════════
 async function loadReports() {
-  // Abrechnungen laden
   const abrArr = await fbGetAll('abrechnungen');
   abrechnungen = {};
   abrArr.forEach(a => { abrechnungen[a.weekKey] = a; });
 
-  // Mitglieder-Buchungen
   const buchungen = await fbGetAll('buchungen');
   const memberWeeks = {};
   buchungen.forEach(b => {
@@ -1457,7 +1480,6 @@ async function loadReports() {
     });
   });
 
-  // Heimspiele
   const gameWeeks = {};
   games.forEach(g => {
     if(!g.date||!g.gaeste?.length) return;
@@ -1480,7 +1502,6 @@ async function loadReports() {
 
   reportData = { member: memberWeeks, game: gameWeeks };
 
-  // Jahr-Filter befüllen
   const years = new Set([
     ...Object.values(memberWeeks).map(w=>w.year),
     ...Object.values(gameWeeks).map(w=>w.year)
@@ -1601,12 +1622,12 @@ function showMemberWeekDetails(key) {
   const drinks=Object.entries(d.articles).filter(([,v])=>v.type==='drink');
   const food=Object.entries(d.articles).filter(([,v])=>v.type==='food');
   let html='';
-  if(drinks.length){ html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><table class="w-full text-sm border-collapse mb-3"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>';
+  if(drinks.length){ html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>';
     drinks.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; });
-    html+='</tbody></table>'; }
-  if(food.length){ html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><table class="w-full text-sm border-collapse mb-3"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>';
+    html+='</tbody></table></div>'; }
+  if(food.length){ html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>';
     food.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; });
-    html+='</tbody></table>'; }
+    html+='</tbody></table></div>'; }
   if(!html) html='<p class="text-gray-400">Keine Artikel.</p>';
   document.getElementById('wkDetailContent').innerHTML=html;
   document.getElementById('modalWeekDetails').classList.remove('hidden');
@@ -1619,12 +1640,12 @@ function showGameWeekDetails(key) {
   let html=`<h3 class="font-semibold mb-2">Spiele:</h3><div class="bg-gray-50 rounded p-3 mb-3">`;
   d.spiele.forEach(s=>{ html+=`<div class="mb-1"><strong>${esc(s.team)}</strong> vs <strong>${esc(s.opponent)}</strong> <span class="text-gray-400 text-sm">(${fDate(s.date)})</span></div>`; });
   html+='</div>';
-  if(Object.keys(d.drinksDetail).length){ html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><table class="w-full text-sm border-collapse mb-3"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>';
+  if(Object.keys(d.drinksDetail).length){ html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>';
     Object.entries(d.drinksDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; });
-    html+='</tbody></table>'; }
-  if(Object.keys(d.foodDetail).length){ html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><table class="w-full text-sm border-collapse mb-3"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>';
+    html+='</tbody></table></div>'; }
+  if(Object.keys(d.foodDetail).length){ html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>';
     Object.entries(d.foodDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; });
-    html+='</tbody></table>'; }
+    html+='</tbody></table></div>'; }
   document.getElementById('wkDetailContent').innerHTML=html;
   document.getElementById('modalWeekDetails').classList.remove('hidden');
 }
@@ -1641,7 +1662,7 @@ document.getElementById('btnExportReport').addEventListener('click',()=>{
   const tbodyId=currentReportTab==='members'?'bodyMemberReport':'bodyGameReport';
   const tableData=[];
   document.querySelectorAll(`#${tbodyId} tr`).forEach(row=>{
-    const cells=[...row.querySelectorAll('td')].slice(0,-2); // skip Abrechnung+Details columns
+    const cells=[...row.querySelectorAll('td')].slice(0,-2);
     tableData.push(cells.map(c=>c.textContent.trim()));
   });
   const heads=currentReportTab==='members'
@@ -1654,10 +1675,9 @@ document.getElementById('btnExportReport').addEventListener('click',()=>{
 });
 
 // ══════════════════════════════════════════════════════════════
-// ABRECHNUNG ERSTELLEN (gemeinsame Wochen-PDF)
+// ABRECHNUNG ERSTELLEN
 // ══════════════════════════════════════════════════════════════
 document.getElementById('btnCreateAbrechnung').addEventListener('click', ()=>{
-  // Alle bekannten KWs sammeln, bereits abgerechnete markieren
   const allKeys = new Set([
     ...Object.keys(reportData.member||{}),
     ...Object.keys(reportData.game||{})
@@ -1666,11 +1686,10 @@ document.getElementById('btnCreateAbrechnung').addEventListener('click', ()=>{
   sel.innerHTML = '<option value="">– bitte wählen –</option>';
   const startSortKey = ABRECHNUNG_START.year * 100 + ABRECHNUNG_START.week;
   [...allKeys].sort().reverse().forEach(key=>{
-    // Parse key to check against start limit
     const m = key.match(/KW\s+(\d+)\/(\d+)/);
     if(m) {
       const keySortKey = parseInt(m[2]) * 100 + parseInt(m[1]);
-      if(keySortKey < startSortKey) return; // skip KWs before the start limit
+      if(keySortKey < startSortKey) return;
     }
     const opt=document.createElement('option');
     opt.value=key; opt.textContent=key+(abrechnungen[key]?' ✓ (bereits abgerechnet)':'');
@@ -1680,7 +1699,6 @@ document.getElementById('btnCreateAbrechnung').addEventListener('click', ()=>{
   document.getElementById('abrechnungHint').classList.add('hidden');
   if(!allKeys.size) { showToast('Keine Daten für eine Abrechnung vorhanden.','warning'); return; }
 
-  // Pre-select the most recent unprocessed week and trigger prefill
   const unprocessed = [...allKeys].sort().reverse().find(k => !abrechnungen[k]);
   if(unprocessed) {
     sel.value = unprocessed;
@@ -1691,13 +1709,11 @@ document.getElementById('btnCreateAbrechnung').addEventListener('click', ()=>{
 });
 document.getElementById('btnCancelAbrechnung').addEventListener('click',()=>document.getElementById('modalCreateAbrechnung').classList.add('hidden'));
 
-// Auto-fill Kontostand from the most recently settled prior week
 document.getElementById('abrechnungKWSelect').addEventListener('change', ()=>{
   const key = document.getElementById('abrechnungKWSelect').value;
   const hint = document.getElementById('abrechnungKontoHint');
   if(!key){ hint.classList.add('hidden'); return; }
 
-  // Convert weekKey "KW 03/2026" → sortable number YYYYWW for comparison
   function kwSortKey(k) {
     const m = k.match(/KW\s+(\d+)\/(\d+)/);
     if(!m) return 0;
@@ -1705,11 +1721,9 @@ document.getElementById('abrechnungKWSelect').addEventListener('change', ()=>{
   }
 
   const selectedSort = kwSortKey(key);
-
-  // Find all settled weeks that are strictly before the selected week
   const priorSettled = Object.values(abrechnungen)
     .filter(a => a.weekKey && kwSortKey(a.weekKey) < selectedSort && a.kontoNeu !== undefined)
-    .sort((a,b) => kwSortKey(b.weekKey) - kwSortKey(a.weekKey)); // newest first
+    .sort((a,b) => kwSortKey(b.weekKey) - kwSortKey(a.weekKey));
 
   if(priorSettled.length > 0) {
     const prev = priorSettled[0];
@@ -1735,12 +1749,10 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
 
   const kontoVor = parseFloat(document.getElementById('abrechnungKontoVor').value) || 0;
 
-  // KW-Zeitraum
   const [kwStr, yrStr] = weekKey.replace('KW ','').split('/');
   const kwNum = parseInt(kwStr), kwYr = parseInt(yrStr);
   const range = kwRange(kwNum, kwYr);
 
-  // ── Daten berechnen ──
   let heimDelta=0, heimVK=0, heimEK=0;
   const heimBody = [];
   ARTICLES.filter(a=>!a.legacyAlias).forEach(art=>{
@@ -1769,31 +1781,27 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   gastBody.push(['GESAMT','', gastEK.toFixed(2)+' €', gastVK.toFixed(2)+' €', gastDelta.toFixed(2)+' €']);
 
   const trinkgeld     = gw?.trinkgeld || 0;
-  const gesamtRoh     = heimDelta + gastDelta;       // Trinkgeld geht in die Sau, nicht in die Abrechnung
-  const gesamtUmsatz  = heimVK + gastVK;             // nur Verkaufserlöse ohne Trinkgeld
+  const gesamtRoh     = heimDelta + gastDelta;
+  const gesamtUmsatz  = heimVK + gastVK;
   const kontoNeu      = kontoVor + gesamtRoh;
 
-  // ── PDF ──
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
 
-  // Layout constants – kompakt für eine Seite
   const PW=297, ML=8, MR=8;
   const usableW = PW - ML - MR;
   const colW    = usableW / 2 - 2;
   const thirdW  = usableW / 3;
 
-  // ── Header ──
   doc.setFontSize(13); doc.setFont(undefined,'bold');
   doc.text('Abrechnung Dartabteilung TSV', ML, 12);
   doc.setFontSize(9); doc.setFont(undefined,'normal');
   doc.text(`${weekKey}   ${range.label}`, PW - MR, 12, { align:'right' });
 
   const tableStartY = 17;
-  const FS   = 7;    // Schriftgröße Tabelle
-  const CP   = 1.4;  // cellPadding
+  const FS   = 7;
+  const CP   = 1.4;
 
-  // ══ HEIM-TABELLE (links) ══
   doc.autoTable({
     head:[['Artikel','Menge','EK','VK Mitglied','Delta']],
     body: heimBody,
@@ -1819,7 +1827,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   });
   const heimEndY = doc.lastAutoTable.finalY;
 
-  // ══ GAST-TABELLE (rechts) – gleiche startY → bündig ══
   const gastX = ML + colW + 4;
   doc.autoTable({
     head:[['Artikel','Menge','EK','VK Gast','Delta']],
@@ -1848,7 +1855,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
 
   const bottomY = Math.max(heimEndY, gastEndY) + 4;
 
-  // Drittel-Positionen
   const c1x  = ML;
   const c2x  = ML + thirdW + 1;
   const c3x  = ML + thirdW*2 + 2;
@@ -1856,7 +1862,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   const FS2  = 8;
   const CP2  = 2;
 
-  // ══ ZUSAMMENFASSUNG + KONTOSTAND (linkes Drittel) ══
   const summBody = [
     ['Rohertrag Heim:',  heimDelta.toFixed(2)+' €'],
     ['Rohertrag Gast:',  gastDelta.toFixed(2)+' €'],
@@ -1899,7 +1904,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
     }
   });
 
-  // ══ BELEGE (mittleres Drittel) ══
   doc.autoTable({
     head:[[{ content:'Belege:', colSpan:2,
       styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
@@ -1912,7 +1916,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
     didParseCell(d){ if(d.row.index===5){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[245,245,245]; } }
   });
 
-  // ══ DATUM + UNTERSCHRIFTEN (rechtes Drittel) ══
   doc.autoTable({
     head:[[{ content:'Unterschriften', colSpan:2,
       styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
@@ -1931,7 +1934,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
 
   const pdfData = doc.output('datauristring');
 
-  // ── Speichern in Firebase ──
   const abrData = {
     weekKey, week:kwNum, year:kwYr,
     kwRange: range.label,
@@ -1980,18 +1982,15 @@ MODALS.forEach(id=>{
 window.addEventListener('load',()=>{
   showPage('members');
 
-  // Called whenever we know a user is authenticated and functions are ready
   function initData() {
     loadMembers();
     loadGames();
   }
 
-  // If auth state already resolved before load (e.g. session restore)
   if(window.currentFirebaseUser) {
     initData();
   }
 
-  // Auth state change fires this after the module sets currentFirebaseUser
   window.addEventListener('userLoggedIn', initData, { once: false });
 });
 </script>
