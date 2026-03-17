@@ -832,7 +832,9 @@ function renderMembers() {
       <td class="p-3 border text-center">
         <button onclick="openEditMember('${m.id}')" class="text-lg mr-1 hover:scale-110 transition-transform">✏️</button>
         ${!inactive
-          ?`<button onclick="deactivateMember('${m.id}')" class="text-lg text-red-500 hover:scale-110 transition-transform">❌</button>`
+          ?`<button onclick="deactivateMember('${m.id}')" class="text-lg text-red-500 hover:scale-110 transition-transform">
+		  <!-- ❌ -->
+		  </button>`
           :`<button onclick="reactivateMember('${m.id}')" class="text-lg text-green-600 hover:scale-110 transition-transform"
              ${bal>0?'disabled style="opacity:.4;cursor:not-allowed"':''}>♻️</button>`}
       </td>`;
@@ -896,22 +898,22 @@ document.getElementById('btnSaveMember').addEventListener('click', async ()=>{
   } catch(e){ console.error(e); showToast('Fehler beim Speichern.','error'); }
 });
 
-function deactivateMember(id) {
-  const m=members.find(x=>x.id===id); if(!m) return;
-  showConfirm(`"${memberDisplayName(m)}" wirklich inaktivieren?`, async ()=>{
-    await fbUpdate('mitglieder',id,{isActive:false}); m.isActive=false; renderMembers(); showToast('Mitglied inaktiviert.');
-  });
-}
-window.deactivateMember=deactivateMember;
+<!-- function deactivateMember(id) { -->
+  <!-- const m=members.find(x=>x.id===id); if(!m) return; -->
+  <!-- showConfirm(`"${memberDisplayName(m)}" wirklich inaktivieren?`, async ()=>{ -->
+    <!-- await fbUpdate('mitglieder',id,{isActive:false}); m.isActive=false; renderMembers(); showToast('Mitglied inaktiviert.'); -->
+  <!-- }); -->
+<!-- } -->
+<!-- window.deactivateMember=deactivateMember; -->
 
-function reactivateMember(id) {
-  const m=members.find(x=>x.id===id); if(!m) return;
-  if((m.balance||0)>0){ showToast('Reaktivierung nicht möglich – offener Saldo.','warning'); return; }
-  showConfirm(`"${memberDisplayName(m)}" reaktivieren?`, async ()=>{
-    await fbUpdate('mitglieder',id,{isActive:true}); m.isActive=true; renderMembers(); showToast('Mitglied reaktiviert.');
-  });
-}
-window.reactivateMember=reactivateMember;
+<!-- function reactivateMember(id) { -->
+  <!-- const m=members.find(x=>x.id===id); if(!m) return; -->
+  <!-- if((m.balance||0)>0){ showToast('Reaktivierung nicht möglich – offener Saldo.','warning'); return; } -->
+  <!-- showConfirm(`"${memberDisplayName(m)}" reaktivieren?`, async ()=>{ -->
+    <!-- await fbUpdate('mitglieder',id,{isActive:true}); m.isActive=true; renderMembers(); showToast('Mitglied reaktiviert.'); -->
+  <!-- }); -->
+<!-- } -->
+<!-- window.reactivateMember=reactivateMember; -->
 
 // ── Schnellbuchung Lieblingsgetränk ──
 async function quickFav(memberId) {
