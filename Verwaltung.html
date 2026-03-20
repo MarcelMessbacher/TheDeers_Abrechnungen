@@ -688,6 +688,46 @@ document.getElementById('btnConfirmOk').addEventListener('click', ()=>{
 });
 
 // ══════════════════════════════════════════════════════════════
+// PDF ÖFFNEN – Blob-URL statt data:-URI im neuen Fenster
+// Behebt "about:blank"-Problem in Chrome/Firefox/Safari,
+// da data:-URIs in neuen Tabs durch Browser-Sicherheitsregeln
+// blockiert werden.
+// ══════════════════════════════════════════════════════════════
+function openPdfDataUri(dataUri) {
+  try {
+    // data:application/pdf;base64,... → Blob → Blob-URL
+    const base64 = dataUri.split(',')[1];
+    const byteStr = atob(base64);
+    const ab = new ArrayBuffer(byteStr.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteStr.length; i++) {
+      ia[i] = byteStr.charCodeAt(i);
+    }
+    const blob = new Blob([ab], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+
+    const win = window.open(url, '_blank');
+
+    if (!win) {
+      // Popup-Blocker aktiv → automatischer Download als Fallback
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'abrechnung.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast('Popup-Blocker aktiv – PDF wurde heruntergeladen.', 'warning');
+    }
+
+    // Blob-URL nach 60 s freigeben
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    console.error('PDF öffnen fehlgeschlagen:', e);
+    showToast('PDF konnte nicht geöffnet werden.', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // FIREBASE HELPERS
 // ══════════════════════════════════════════════════════════════
 async function fbAdd(coll, data) {
@@ -897,23 +937,6 @@ document.getElementById('btnSaveMember').addEventListener('click', async ()=>{
     document.getElementById('modalMember').classList.add('hidden');
   } catch(e){ console.error(e); showToast('Fehler beim Speichern.','error'); }
 });
-
-<!-- function deactivateMember(id) { -->
-  <!-- const m=members.find(x=>x.id===id); if(!m) return; -->
-  <!-- showConfirm(`"${memberDisplayName(m)}" wirklich inaktivieren?`, async ()=>{ -->
-    <!-- await fbUpdate('mitglieder',id,{isActive:false}); m.isActive=false; renderMembers(); showToast('Mitglied inaktiviert.'); -->
-  <!-- }); -->
-<!-- } -->
-<!-- window.deactivateMember=deactivateMember; -->
-
-<!-- function reactivateMember(id) { -->
-  <!-- const m=members.find(x=>x.id===id); if(!m) return; -->
-  <!-- if((m.balance||0)>0){ showToast('Reaktivierung nicht möglich – offener Saldo.','warning'); return; } -->
-  <!-- showConfirm(`"${memberDisplayName(m)}" reaktivieren?`, async ()=>{ -->
-    <!-- await fbUpdate('mitglieder',id,{isActive:true}); m.isActive=true; renderMembers(); showToast('Mitglied reaktiviert.'); -->
-  <!-- }); -->
-<!-- } -->
-<!-- window.reactivateMember=reactivateMember; -->
 
 // ── Schnellbuchung Lieblingsgetränk ──
 async function quickFav(memberId) {
@@ -1180,7 +1203,12 @@ function renderGames() {
   });
 }
 
-function showGamePDF(i){ const g=games[i]; if(!g.pdfData) return; const w=window.open(); w.document.write(`<iframe src="${g.pdfData}" width="100%" height="100%"></iframe>`); }
+// ── PDF eines finalisierten Spiels anzeigen ──
+function showGamePDF(i) {
+  const g = games[i];
+  if (!g.pdfData) return;
+  openPdfDataUri(g.pdfData);
+}
 window.showGamePDF=showGamePDF;
 
 // ── Neues Spiel ──
@@ -1422,7 +1450,7 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async ()=>{
   renderGames();
   document.getElementById('modalGame').classList.add('hidden');
   clearGameForm();
-  const w=window.open(); w.document.write(`<iframe src="${pdfData}" width="100%" height="100%"></iframe>`);
+  openPdfDataUri(pdfData);
   showToast('Spiel final abgerechnet!');
 });
 
@@ -1614,7 +1642,7 @@ function renderGameReport(data) {
 function showAbrechnungPDF(weekKey) {
   const abr=abrechnungen[weekKey];
   if(!abr?.pdfData){ showToast('Kein PDF vorhanden.','warning'); return; }
-  const w=window.open(); w.document.write(`<iframe src="${abr.pdfData}" width="100%" height="100%"></iframe>`);
+  openPdfDataUri(abr.pdfData);
 }
 window.showAbrechnungPDF=showAbrechnungPDF;
 
@@ -1958,8 +1986,7 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   renderGameReport(reportData.game||{});
 
   document.getElementById('modalCreateAbrechnung').classList.add('hidden');
-  const w = window.open();
-  w.document.write(`<iframe src="${pdfData}" width="100%" height="100%"></iframe>`);
+  openPdfDataUri(pdfData);
   showToast(`Abrechnung ${weekKey} erstellt! Neuer Kontostand: ${kontoNeu.toFixed(2)} €`);
 });
 
