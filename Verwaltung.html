@@ -10,8 +10,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc,
+      onSnapshot, runTransaction, serverTimestamp, writeBatch, getDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut }
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
@@ -23,12 +25,13 @@
       messagingSenderId: "27261468983",
       appId: "1:27261468983:web:1a6340756263aad9455ab2"
     };
-    const app = initializeApp(cfg);
-    const db  = getFirestore(app);
+    const app  = initializeApp(cfg);
+    const db   = getFirestore(app);
     const auth = getAuth(app);
+
     window.firebaseDB    = db;
     window.firebaseAuth  = auth;
-    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc };
+    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, writeBatch, getDoc };
     window.authUtils     = { signInWithEmailAndPassword, onAuthStateChanged, signOut };
     window.firebaseReady = true;
 
@@ -39,6 +42,8 @@
         document.getElementById('mainApp').classList.remove('hidden');
         window.dispatchEvent(new CustomEvent('userLoggedIn'));
       } else {
+        // Unsubscribe all listeners on logout
+        if (window.unsubscribeAll) window.unsubscribeAll();
         document.getElementById('loginPage').classList.remove('hidden');
         document.getElementById('mainApp').classList.add('hidden');
       }
@@ -60,6 +65,25 @@
     .toast.show { opacity:1; }
     .toast.error   { background:#DC2626; }
     .toast.warning { background:#f59e0b; }
+
+    /* Sync-Indikator */
+    #syncIndicator {
+      position: fixed; top: 10px; right: 10px; z-index: 8888;
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.95); border: 1px solid #e5e7eb;
+      border-radius: 20px; padding: 4px 12px; font-size: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: all 0.3s;
+    }
+    #syncIndicator.syncing { border-color: #f59e0b; }
+    #syncIndicator.error   { border-color: #dc2626; }
+    #syncDot {
+      width: 8px; height: 8px; border-radius: 50%; background: #16a34a;
+      transition: background 0.3s;
+    }
+    #syncIndicator.syncing #syncDot { background: #f59e0b; animation: pulse 1s infinite; }
+    #syncIndicator.error   #syncDot { background: #dc2626; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
     .login-wrap { min-height:100vh;display:flex;align-items:center;justify-content:center;
       background:#f7f8f9;
@@ -95,32 +119,26 @@
     .tab-btn.active    { border-bottom:3px solid #374151;font-weight:700;color:#111827; }
     .tab-btn:not(.active){ color:#6b7280;border-bottom:3px solid transparent; }
 
-    /* ── Responsive nav buttons ── */
     .nav-btn { width: 100%; }
-
-    /* ── Table scroll wrapper ── */
     .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
     .table-scroll table { min-width: 600px; }
-
-    /* ── Page wrapper: consistent max-width ── */
     .page-wrap { width: 100%; }
 
-    /* ── Header layout ── */
     .app-header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      margin-bottom: 1.25rem;
-      gap: 0.75rem;
+      display: flex; flex-direction: column;
+      align-items: center; text-align: center;
+      margin-bottom: 1.25rem; gap: 0.75rem;
     }
-    .app-header img {
-      height: 7rem;
-      width: auto;
-    }
+    .app-header img { height: 7rem; width: auto; }
   </style>
 </head>
 <body class="bg-gray-100 p-3 sm:p-6">
+
+<!-- Sync-Indikator -->
+<div id="syncIndicator" class="hidden">
+  <div id="syncDot"></div>
+  <span id="syncText">Verbunden</span>
+</div>
 
 <!-- ═══════════ LOGIN ═══════════ -->
 <div id="loginPage" class="login-wrap">
@@ -148,7 +166,6 @@
 <!-- ═══════════ HAUPT-APP ═══════════ -->
 <div id="mainApp" class="hidden">
 
-  <!-- Header: Titel + Logo gestapelt, dann Nav-Buttons -->
   <div class="app-header">
     <div>
       <h1 class="text-2xl sm:text-4xl font-bold text-gray-800 mb-1">Dartabteilung – The Deers</h1>
@@ -157,7 +174,6 @@
     <img src="The Deers Logo A4.svg" alt="Logo">
   </div>
 
-  <!-- Navigation -->
   <nav class="mb-6">
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
       <button id="btn-members"  onclick="showPage('members')"  class="nav-btn bg-gray-400 text-white px-4 py-3 rounded font-bold hover:bg-gray-500 text-sm sm:text-base">Mitglieder</button>
@@ -189,14 +205,10 @@
   <!-- ═══════════ SEITE: AUSWERTUNGEN ═══════════ -->
   <div id="page-reports" class="hidden page-wrap">
     <h1 class="text-2xl sm:text-3xl font-bold mb-4">Auswertungen</h1>
-
-    <!-- Sub-tabs -->
     <div class="flex gap-1 mb-6 border-b">
       <button id="rtab-members" onclick="switchReportTab('members')" class="tab-btn active px-5 py-2 text-sm">Mitglieder</button>
       <button id="rtab-games"   onclick="switchReportTab('games')"   class="tab-btn px-5 py-2 text-sm">Heimspiele</button>
     </div>
-
-    <!-- Filter + Buttons -->
     <div class="bg-white shadow rounded p-4 mb-6 flex flex-wrap items-end gap-4">
       <div>
         <label class="block text-sm font-medium mb-1">Jahr filtern</label>
@@ -207,8 +219,6 @@
       <button id="btnCreateAbrechnung" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 font-semibold">Abrechnung erstellen</button>
       <button id="btnExportReport"     class="bg-blue-600  text-white px-4 py-2 rounded hover:bg-blue-700  font-semibold">Als PDF exportieren</button>
     </div>
-
-    <!-- Mitglieder-Auswertung -->
     <div id="report-members-wrap">
       <div class="overflow-x-auto bg-white shadow rounded mb-6">
         <table id="tblMemberReport" class="min-w-full border">
@@ -243,8 +253,6 @@
       </div>
       <div id="memberNoData" class="text-center py-8 text-gray-500 hidden">Noch keine Buchungen vorhanden.</div>
     </div>
-
-    <!-- Heimspiele-Auswertung -->
     <div id="report-games-wrap" class="hidden">
       <div class="overflow-x-auto bg-white shadow rounded mb-6">
         <table id="tblGameReport" class="min-w-full border">
@@ -277,15 +285,12 @@
       </div>
       <div id="gameNoData" class="text-center py-8 text-gray-500 hidden">Noch keine Heimspiele vorhanden.</div>
     </div>
-  </div><!-- /page-reports -->
-
-</div><!-- /mainApp -->
+  </div>
+</div>
 
 <!-- ════════════════════════════════════════════════
      MODALS – MITGLIEDER
 ════════════════════════════════════════════════ -->
-
-<!-- Modal: Mitglied anlegen/bearbeiten -->
 <div id="modalMember" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
@@ -312,7 +317,6 @@
   </div>
 </div>
 
-<!-- Modal: Buchung erfassen -->
 <div id="modalBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
@@ -342,7 +346,6 @@
   </div>
 </div>
 
-<!-- Modal: Buchung bearbeiten -->
 <div id="modalEditBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
@@ -367,7 +370,6 @@
   </div>
 </div>
 
-<!-- Modal: Verlauf -->
 <div id="modalHistory" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-3xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
@@ -397,7 +399,6 @@
   </div>
 </div>
 
-<!-- Modal: Abrechnen (Mitglied bezahlt) -->
 <div id="modalSettle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md modal-bg">
     <div class="modal-inner">
@@ -427,8 +428,6 @@
 <!-- ════════════════════════════════════════════════
      MODALS – HEIMSPIELE
 ════════════════════════════════════════════════ -->
-
-<!-- Modal: Spiel -->
 <div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
@@ -476,7 +475,6 @@
   </div>
 </div>
 
-<!-- Modal: Getränke (Gast) -->
 <div id="modalGuestDrinks" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-4">Getränke</h2>
@@ -494,7 +492,6 @@
   </div>
 </div>
 
-<!-- Modal: Essen (Gast) -->
 <div id="modalGuestFood" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-4">Essen</h2>
@@ -512,7 +509,6 @@
   </div>
 </div>
 
-<!-- Modal: Gast-Abrechnung -->
 <div id="modalGuestSettle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-4">Abrechnung</h2>
@@ -539,8 +535,6 @@
 <!-- ════════════════════════════════════════════════
      MODALS – AUSWERTUNGEN
 ════════════════════════════════════════════════ -->
-
-<!-- Modal: Wochendetails -->
 <div id="modalWeekDetails" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto">
     <h2 class="text-xl font-bold mb-1">Details: <span id="wkDetailTitle"></span></h2>
@@ -551,7 +545,6 @@
   </div>
 </div>
 
-<!-- Modal: Abrechnung erstellen (KW wählen) -->
 <div id="modalCreateAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md">
     <h2 class="text-xl font-bold mb-4">Abrechnung erstellen</h2>
@@ -575,7 +568,6 @@
   </div>
 </div>
 
-<!-- Modal: Bestätigung -->
 <div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md">
     <h2 class="text-xl font-bold mb-4">Bestätigung erforderlich</h2>
@@ -635,6 +627,24 @@ let reportData          = { member:{}, game:{} };
 let currentReportTab    = 'members';
 let abrechnungen        = {};
 
+// Echtzeit-Listener Handles (zum Abmelden beim Logout)
+let unsubMembers    = null;
+let unsubBuchungen  = null;
+let unsubGames      = null;
+let unsubAbrech     = null;
+
+// Buchungen im Speicher (für schnellen Zugriff ohne neu laden)
+let buchungenCache  = {};  // id → buchung
+
+// ══════════════════════════════════════════════════════════════
+// SYNC-INDIKATOR
+// ══════════════════════════════════════════════════════════════
+function setSyncStatus(status, text) {
+  const ind = document.getElementById('syncIndicator');
+  ind.className = status === 'ok' ? '' : status;
+  document.getElementById('syncText').textContent = text;
+}
+
 // ══════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════
@@ -687,39 +697,22 @@ document.getElementById('btnConfirmOk').addEventListener('click', ()=>{
   document.getElementById('modalConfirm').classList.add('hidden');
 });
 
-// ══════════════════════════════════════════════════════════════
-// PDF ÖFFNEN – Blob-URL statt data:-URI im neuen Fenster
-// Behebt "about:blank"-Problem in Chrome/Firefox/Safari,
-// da data:-URIs in neuen Tabs durch Browser-Sicherheitsregeln
-// blockiert werden.
-// ══════════════════════════════════════════════════════════════
 function openPdfDataUri(dataUri) {
   try {
-    // data:application/pdf;base64,... → Blob → Blob-URL
     const base64 = dataUri.split(',')[1];
     const byteStr = atob(base64);
     const ab = new ArrayBuffer(byteStr.length);
     const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteStr.length; i++) {
-      ia[i] = byteStr.charCodeAt(i);
-    }
+    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
     const blob = new Blob([ab], { type: 'application/pdf' });
     const url  = URL.createObjectURL(blob);
-
     const win = window.open(url, '_blank');
-
     if (!win) {
-      // Popup-Blocker aktiv → automatischer Download als Fallback
       const a = document.createElement('a');
-      a.href = url;
-      a.download = 'abrechnung.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = url; a.download = 'abrechnung.pdf';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       showToast('Popup-Blocker aktiv – PDF wurde heruntergeladen.', 'warning');
     }
-
-    // Blob-URL nach 60 s freigeben
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch (e) {
     console.error('PDF öffnen fehlgeschlagen:', e);
@@ -728,28 +721,224 @@ function openPdfDataUri(dataUri) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// FIREBASE HELPERS
+// FIREBASE HELPERS – alle balance-kritischen Ops als Transaction
 // ══════════════════════════════════════════════════════════════
+const DB   = () => window.firebaseDB;
+const FU   = () => window.firebaseUtils;
+
+/** Einfaches addDoc */
 async function fbAdd(coll, data) {
-  const r = await window.firebaseUtils.addDoc(
-    window.firebaseUtils.collection(window.firebaseDB, coll),
-    { ...data, createdAt: new Date().toISOString() }
-  );
+  const r = await FU().addDoc(FU().collection(DB(), coll), { ...data, createdAt: new Date().toISOString() });
   return r.id;
 }
+
+/** Einfaches updateDoc */
 async function fbUpdate(coll, id, data) {
-  const r = window.firebaseUtils.doc(window.firebaseDB, coll, id);
-  await window.firebaseUtils.updateDoc(r, { ...data, updatedAt: new Date().toISOString() });
+  await FU().updateDoc(FU().doc(DB(), coll, id), { ...data, updatedAt: new Date().toISOString() });
 }
+
+/** Alle Docs einer Collection laden (Einmalabruf) */
 async function fbGetAll(coll) {
-  const snap = await window.firebaseUtils.getDocs(
-    window.firebaseUtils.collection(window.firebaseDB, coll)
-  );
-  const res=[]; snap.forEach(d=>res.push({id:d.id,...d.data()})); return res;
+  const snap = await FU().getDocs(FU().collection(DB(), coll));
+  const res = []; snap.forEach(d => res.push({ id: d.id, ...d.data() })); return res;
 }
+
 async function fbDelete(coll, id) {
-  await window.firebaseUtils.deleteDoc(window.firebaseUtils.doc(window.firebaseDB, coll, id));
+  await FU().deleteDoc(FU().doc(DB(), coll, id));
 }
+
+/**
+ * ATOMARE BUCHUNG HINZUFÜGEN
+ * Liest den Mitglieds-Saldo innerhalb einer Transaction und addiert den Betrag.
+ * Schreibt gleichzeitig die Buchung (als addDoc außerhalb geht nicht in Transaction,
+ * daher: Buchung zuerst mit addDoc anlegen, dann Member-Balance in Transaction updaten).
+ *
+ * Strategie: addDoc für Buchung, dann runTransaction für Member-Balance.
+ * Die Transaction liest den aktuellen Wert aus Firestore und schreibt atomar.
+ */
+async function addBookingAtomically(memberId, bookingData) {
+  // 1. Buchung anlegen
+  const bkId = await fbAdd('buchungen', bookingData);
+
+  // 2. Member-Balance atomar updaten (Transaction verhindert Race Condition)
+  const memberRef = FU().doc(DB(), 'mitglieder', memberId);
+  await FU().runTransaction(DB(), async (tx) => {
+    const memberSnap = await tx.get(memberRef);
+    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
+    const currentBalance = memberSnap.data().balance || 0;
+    const newBalance = r2(currentBalance + bookingData.totalVK);
+    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+  });
+
+  return bkId;
+}
+
+/**
+ * ATOMARES BUCHUNG-UPDATE
+ * Liest alte Buchung + Member-Balance in einer Transaction.
+ */
+async function updateBookingAtomically(bookingId, newItems, newVK, newEK) {
+  const bkRef     = FU().doc(DB(), 'buchungen', bookingId);
+
+  // Erst alte Buchung lesen um memberId und alten VK zu kennen
+  const oldSnap = await FU().getDoc(bkRef);
+  if (!oldSnap.exists()) throw new Error('Buchung nicht gefunden');
+  const old = oldSnap.data();
+  const memberId = old.memberId;
+  const delta = r2(newVK - old.totalVK);
+
+  const memberRef = FU().doc(DB(), 'mitglieder', memberId);
+
+  await FU().runTransaction(DB(), async (tx) => {
+    const memberSnap = await tx.get(memberRef);
+    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
+    const currentBalance = memberSnap.data().balance || 0;
+    const newBalance = r2(currentBalance + delta);
+    tx.update(bkRef, { items: newItems, totalVK: r2(newVK), totalEK: r2(newEK), updatedAt: new Date().toISOString() });
+    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+  });
+
+  return { memberId, delta };
+}
+
+/**
+ * ATOMARES BUCHUNG-LÖSCHEN
+ */
+async function deleteBookingAtomically(bookingId) {
+  const bkRef = FU().doc(DB(), 'buchungen', bookingId);
+  const oldSnap = await FU().getDoc(bkRef);
+  if (!oldSnap.exists()) throw new Error('Buchung nicht gefunden');
+  const old = oldSnap.data();
+  const memberId = old.memberId;
+  const memberRef = FU().doc(DB(), 'mitglieder', memberId);
+
+  await FU().runTransaction(DB(), async (tx) => {
+    const memberSnap = await tx.get(memberRef);
+    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
+    const currentBalance = memberSnap.data().balance || 0;
+    const newBalance = r2(currentBalance - old.totalVK);
+    tx.delete(bkRef);
+    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+  });
+
+  return memberId;
+}
+
+/**
+ * ATOMARES ABRECHNEN (Settle)
+ * Liest offene Buchungen + Member-Balance in einer Transaction.
+ */
+async function settleAtomically(memberId, paid, settleDate) {
+  // Offene Buchungen aus Cache holen, älteste zuerst
+  const allBk = Object.values(buchungenCache)
+    .filter(b => b.memberId === memberId && !b.settled)
+    .sort((a, b2) => a.date.localeCompare(b2.date));
+
+  const memberRef = FU().doc(DB(), 'mitglieder', memberId);
+
+  await FU().runTransaction(DB(), async (tx) => {
+    const memberSnap = await tx.get(memberRef);
+    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
+    const currentBalance = memberSnap.data().balance || 0;
+
+    // Saldo darf nicht unter 0 fallen – bezahlt maximal so viel wie offen
+    const effectivePaid = Math.min(r2(paid), r2(currentBalance));
+    const newBalance = r2(currentBalance - effectivePaid);
+
+    // Buchungen als bezahlt markieren, solange das Guthaben reicht
+    let rem = effectivePaid;
+    for (const b of allBk) {
+      if (rem <= 0) break;
+      const bkRef = FU().doc(DB(), 'buchungen', b.id);
+      tx.update(bkRef, { settled: true, settledAt: settleDate, updatedAt: new Date().toISOString() });
+      rem = r2(rem - b.totalVK);
+    }
+
+    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// ECHTZEIT-LISTENER
+// ══════════════════════════════════════════════════════════════
+function startRealtimeListeners() {
+  document.getElementById('syncIndicator').classList.remove('hidden');
+  setSyncStatus('syncing', 'Verbinde…');
+
+  // ── Mitglieder ──
+  unsubMembers = FU().onSnapshot(
+    FU().collection(DB(), 'mitglieder'),
+    (snap) => {
+      members = [];
+      snap.forEach(d => members.push({ id: d.id, ...d.data() }));
+      members.sort((a,b) => (a.lastname||a.name||'').localeCompare(b.lastname||b.name||'', 'de'));
+      renderMembers();
+      // Offenen History-Modal aktualisieren
+      if (historyMemberId && !document.getElementById('modalHistory').classList.contains('hidden')) {
+        openHistoryModal(historyMemberId);
+      }
+      setSyncStatus('ok', 'Verbunden');
+    },
+    (err) => {
+      console.error('Mitglieder-Listener Fehler:', err);
+      setSyncStatus('error', 'Verbindungsfehler');
+    }
+  );
+
+  // ── Buchungen ──
+  unsubBuchungen = FU().onSnapshot(
+    FU().collection(DB(), 'buchungen'),
+    (snap) => {
+      buchungenCache = {};
+      snap.forEach(d => { buchungenCache[d.id] = { id: d.id, ...d.data() }; });
+      // History-Modal aktualisieren falls offen
+      if (historyMemberId && !document.getElementById('modalHistory').classList.contains('hidden')) {
+        refreshHistoryModal(historyMemberId);
+      }
+      // Reports neu laden falls Auswertungsseite aktiv
+      if (!document.getElementById('page-reports').classList.contains('hidden')) {
+        buildReportDataAndRender();
+      }
+    },
+    (err) => { console.error('Buchungen-Listener Fehler:', err); }
+  );
+
+  // ── Spiele ──
+  unsubGames = FU().onSnapshot(
+    FU().collection(DB(), 'spiele'),
+    (snap) => {
+      games = [];
+      snap.forEach(d => games.push({ id: d.id, firebaseId: d.id, ...d.data() }));
+      renderGames();
+      if (!document.getElementById('page-reports').classList.contains('hidden')) {
+        buildReportDataAndRender();
+      }
+    },
+    (err) => { console.error('Spiele-Listener Fehler:', err); }
+  );
+
+  // ── Abrechnungen ──
+  unsubAbrech = FU().onSnapshot(
+    FU().collection(DB(), 'abrechnungen'),
+    (snap) => {
+      abrechnungen = {};
+      snap.forEach(d => { const data = { id: d.id, ...d.data() }; abrechnungen[data.weekKey] = data; });
+      if (!document.getElementById('page-reports').classList.contains('hidden')) {
+        buildReportDataAndRender();
+      }
+    },
+    (err) => { console.error('Abrechnungen-Listener Fehler:', err); }
+  );
+}
+
+function stopRealtimeListeners() {
+  if (unsubMembers)   { unsubMembers();   unsubMembers = null; }
+  if (unsubBuchungen) { unsubBuchungen(); unsubBuchungen = null; }
+  if (unsubGames)     { unsubGames();     unsubGames = null; }
+  if (unsubAbrech)    { unsubAbrech();    unsubAbrech = null; }
+  document.getElementById('syncIndicator').classList.add('hidden');
+}
+window.unsubscribeAll = stopRealtimeListeners;
 
 // ══════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -763,7 +952,7 @@ function showPage(page) {
   document.getElementById('page-'+page).classList.remove('hidden');
   const ab = document.getElementById('btn-'+page);
   if(ab){ ab.classList.remove('bg-gray-300'); ab.classList.add('bg-gray-400'); }
-  if(page==='reports') loadReports();
+  if(page === 'reports') buildReportDataAndRender();
 }
 window.showPage = showPage;
 
@@ -785,7 +974,9 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
     err.textContent='Ungültige E-Mail oder Passwort.'; err.classList.remove('hidden');
   } finally { btn.disabled=false; btn.textContent='Anmelden'; }
 });
+
 async function doLogout() {
+  stopRealtimeListeners();
   await window.authUtils.signOut(window.firebaseAuth);
   document.getElementById('loginForm').reset();
   document.getElementById('loginError').classList.add('hidden');
@@ -796,31 +987,25 @@ window.doLogout = doLogout;
 // ══════════════════════════════════════════════════════════════
 // MITGLIEDER
 // ══════════════════════════════════════════════════════════════
-async function loadMembers() {
-  try {
-    members = await fbGetAll('mitglieder');
-    members.sort((a,b)=>(a.lastname||a.name||'').localeCompare(b.lastname||b.name||'','de'));
-    renderMembers();
-  } catch(e) { console.error(e); showToast('Fehler beim Laden der Mitglieder.','error'); }
-}
+// loadMembers() entfällt – Daten kommen via onSnapshot
 
 function memberDisplayName(m) {
   return m.lastname ? `${m.lastname}, ${m.firstname||''}` : (m.name||'');
 }
 
 function renderMembers() {
-  const total = members.reduce((s,m)=>s+(m.balance||0),0);
+  const total = members.reduce((s,m) => s + (m.balance||0), 0);
   const td = document.getElementById('totalBalanceDisplay');
   td.textContent = fEuro(total);
-  td.className = total>0 ? 'text-xl font-bold text-red-600' : 'text-xl font-bold text-green-600';
+  td.className = total > 0 ? 'text-xl font-bold text-red-600' : 'text-xl font-bold text-green-600';
 
-  const active   = members.filter(m=>m.isActive!==false);
-  const inactive = members.filter(m=>m.isActive===false);
+  const active   = members.filter(m => m.isActive !== false);
+  const inactive = members.filter(m => m.isActive === false);
   document.getElementById('memberCountLabel').textContent =
-    `${active.length} aktiv${inactive.length?', '+inactive.length+' inaktiv':''}`;
+    `${active.length} aktiv${inactive.length ? ', '+inactive.length+' inaktiv' : ''}`;
 
   const c = document.getElementById('membersContainer');
-  if(members.length===0){ c.innerHTML='<p class="text-gray-400 text-center mt-8">Noch keine Mitglieder angelegt.</p>'; return; }
+  if(!members.length){ c.innerHTML='<p class="text-gray-400 text-center mt-8">Noch keine Mitglieder angelegt.</p>'; return; }
 
   c.innerHTML='';
   const wrapper = document.createElement('div');
@@ -844,37 +1029,35 @@ function renderMembers() {
   const tbody = document.getElementById('membersTbody');
 
   [...active,...inactive].forEach(m => {
-    const inactive = m.isActive===false;
-    const bal = m.balance||0;
+    const inact = m.isActive === false;
+    const bal = m.balance || 0;
     const dn  = memberDisplayName(m);
-    const pd  = m.preference_drink||'–';
+    const pd  = m.preference_drink || '–';
     const row = document.createElement('tr');
-    if(inactive) row.classList.add('inactive-row');
+    if(inact) row.classList.add('inactive-row');
     row.innerHTML=`
       <td class="p-3 border font-medium">${esc(dn)}</td>
       <td class="p-3 border text-center">
-        ${!inactive?`<button onclick="openBookingModal('${m.id}')"
+        ${!inact?`<button onclick="openBookingModal('${m.id}')"
           class="bg-gray-700 hover:bg-gray-900 text-white text-xs font-bold px-3 py-1 rounded">+ Buchen</button>`:'–'}
       </td>
       <td class="p-3 border text-gray-600 text-sm">
         ${esc(pd)}
-        ${!inactive&&m.preference_drink?`<button onclick="quickFav('${m.id}')" title="Lieblingsgetränk +1"
+        ${!inact&&m.preference_drink?`<button onclick="quickFav('${m.id}')" title="Lieblingsgetränk +1"
           class="ml-1 bg-green-100 hover:bg-green-200 border border-green-400 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">+1</button>`:''}
       </td>
       <td class="p-3 border text-right"><span class="${bal>0?'bal-pos':'bal-zero'}">${fEuro(bal)}</span></td>
       <td class="p-3 border text-center">
-        ${!inactive&&bal>0?`<button onclick="openSettleModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">💰</button>`
-          :(!inactive?'<span class="text-green-500 text-xs">✓ beglichen</span>':'–')}
+        ${!inact&&bal>0?`<button onclick="openSettleModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">💰</button>`
+          :(!inact?'<span class="text-green-500 text-xs">✓ beglichen</span>':'–')}
       </td>
       <td class="p-3 border text-center">
         <button onclick="openHistoryModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">📋</button>
       </td>
       <td class="p-3 border text-center">
         <button onclick="openEditMember('${m.id}')" class="text-lg mr-1 hover:scale-110 transition-transform">✏️</button>
-        ${!inactive
-          ?`<button onclick="deactivateMember('${m.id}')" class="text-lg text-red-500 hover:scale-110 transition-transform">
-		  <!-- ❌ -->
-		  </button>`
+        ${!inact
+          ?`<button onclick="deactivateMember('${m.id}')" class="text-lg text-red-500 hover:scale-110 transition-transform"></button>`
           :`<button onclick="reactivateMember('${m.id}')" class="text-lg text-green-600 hover:scale-110 transition-transform"
              ${bal>0?'disabled style="opacity:.4;cursor:not-allowed"':''}>♻️</button>`}
       </td>`;
@@ -923,20 +1106,31 @@ document.getElementById('btnSaveMember').addEventListener('click', async ()=>{
   try {
     if(editMemberId){
       await fbUpdate('mitglieder',editMemberId,{firstname:fn,lastname:ln,name,preference_drink:pd});
-      const m=members.find(x=>x.id===editMemberId);
-      if(m){ m.firstname=fn; m.lastname=ln; m.name=name; m.preference_drink=pd; }
       showToast('Mitglied aktualisiert.');
     } else {
       const data={firstname:fn,lastname:ln,name,preference_drink:pd,balance:0,isActive:true};
-      const id=await fbAdd('mitglieder',data);
-      members.push({id,...data});
+      await fbAdd('mitglieder',data);
       showToast('Mitglied hinzugefügt!');
     }
-    members.sort((a,b)=>(a.lastname||a.name||'').localeCompare(b.lastname||b.name||'','de'));
-    renderMembers();
+    // renderMembers() wird automatisch durch onSnapshot ausgelöst
     document.getElementById('modalMember').classList.add('hidden');
   } catch(e){ console.error(e); showToast('Fehler beim Speichern.','error'); }
 });
+
+// ── Deaktivieren / Reaktivieren ──
+async function deactivateMember(id) {
+  showConfirm('Mitglied wirklich deaktivieren?', async () => {
+    await fbUpdate('mitglieder', id, { isActive: false });
+    showToast('Mitglied deaktiviert.');
+  });
+}
+window.deactivateMember = deactivateMember;
+
+async function reactivateMember(id) {
+  await fbUpdate('mitglieder', id, { isActive: true });
+  showToast('Mitglied reaktiviert.');
+}
+window.reactivateMember = reactivateMember;
 
 // ── Schnellbuchung Lieblingsgetränk ──
 async function quickFav(memberId) {
@@ -944,13 +1138,13 @@ async function quickFav(memberId) {
   const art=ARTICLES.find(a=>a.name===m.preference_drink);
   if(!art){ showToast('Artikel nicht gefunden.','error'); return; }
   showConfirm(`1× „${art.name}" (${fEuro(art.memberPrice)}) für ${memberDisplayName(m)} buchen?`, async ()=>{
-    const bk={memberId,date:today(),
-      items:[{articleId:art.id,name:art.name,type:art.type,qty:1,sellPrice:art.memberPrice,buyPrice:art.buyPrice}],
-      totalVK:art.memberPrice,totalEK:art.buyPrice,settled:false,settledAt:null};
-    await fbAdd('buchungen',bk);
-    m.balance=r2((m.balance||0)+art.memberPrice);
-    await fbUpdate('mitglieder',memberId,{balance:m.balance});
-    renderMembers(); showToast(`+1 ${art.name} für ${memberDisplayName(m)} gebucht.`);
+    try {
+      const bk={memberId,date:today(),
+        items:[{articleId:art.id,name:art.name,type:art.type,qty:1,sellPrice:art.memberPrice,buyPrice:art.buyPrice}],
+        totalVK:art.memberPrice,totalEK:art.buyPrice,settled:false,settledAt:null};
+      await addBookingAtomically(memberId, bk);
+      showToast(`+1 ${art.name} für ${memberDisplayName(m)} gebucht.`);
+    } catch(e) { console.error(e); showToast('Fehler beim Buchen.','error'); }
   });
 }
 window.quickFav=quickFav;
@@ -1019,19 +1213,19 @@ document.getElementById('btnSaveBooking').addEventListener('click', async ()=>{
   if(!items.length){ showToast('Bitte mindestens einen Artikel wählen.','error'); return; }
   const date=document.getElementById('bkDate').value;
   if(!date){ showToast('Bitte Datum wählen.','error'); return; }
-  await fbAdd('buchungen',{memberId:bookingMemberId,date,items,totalVK:r2(vk),totalEK:r2(ek),settled:false,settledAt:null});
-  const m=members.find(x=>x.id===bookingMemberId);
-  m.balance=r2((m.balance||0)+vk);
-  await fbUpdate('mitglieder',bookingMemberId,{balance:m.balance});
-  renderMembers();
-  document.getElementById('modalBooking').classList.add('hidden');
-  showToast(`Buchung gespeichert: ${fEuro(vk)}`);
+  try {
+    await addBookingAtomically(bookingMemberId, {
+      memberId:bookingMemberId,date,items,totalVK:r2(vk),totalEK:r2(ek),settled:false,settledAt:null
+    });
+    document.getElementById('modalBooking').classList.add('hidden');
+    showToast(`Buchung gespeichert: ${fEuro(vk)}`);
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Buchung.','error'); }
 });
 
 // ── Buchung bearbeiten ──
 async function openEditBookingModal(bookingId) {
-  const all=await fbGetAll('buchungen');
-  const b=all.find(x=>x.id===bookingId); if(!b) return;
+  const b = buchungenCache[bookingId];
+  if(!b) { showToast('Buchung nicht gefunden.','error'); return; }
   editBookingId=bookingId; editBookingQty={};
   b.items.forEach(i=>{ editBookingQty[i.articleId]=i.qty; });
   const m=members.find(x=>x.id===b.memberId);
@@ -1072,29 +1266,22 @@ document.getElementById('btnSaveEditBk').addEventListener('click', async ()=>{
     vk+=a.memberPrice*q; ek+=a.buyPrice*q;
   }});
   if(!items.length){ showToast('Bitte mindestens einen Artikel wählen.','error'); return; }
-  const all=await fbGetAll('buchungen');
-  const old=all.find(x=>x.id===editBookingId);
-  await fbUpdate('buchungen',editBookingId,{items,totalVK:r2(vk),totalEK:r2(ek)});
-  if(old){ const m=members.find(x=>x.id===old.memberId);
-    if(m){ m.balance=r2((m.balance||0)+r2(vk-old.totalVK)); await fbUpdate('mitglieder',m.id,{balance:m.balance}); }
-  }
-  renderMembers();
-  document.getElementById('modalEditBooking').classList.add('hidden');
-  if(historyMemberId) openHistoryModal(historyMemberId);
-  showToast('Buchung aktualisiert.');
+  try {
+    const { memberId } = await updateBookingAtomically(editBookingId, items, r2(vk), r2(ek));
+    document.getElementById('modalEditBooking').classList.add('hidden');
+    if(historyMemberId) openHistoryModal(historyMemberId);
+    showToast('Buchung aktualisiert.');
+  } catch(e) { console.error(e); showToast('Fehler beim Aktualisieren.','error'); }
 });
 
 // ── Buchung löschen ──
 async function deleteBooking(bookingId) {
   showConfirm('Buchung wirklich löschen?', async ()=>{
-    const all=await fbGetAll('buchungen');
-    const b=all.find(x=>x.id===bookingId); if(!b) return;
-    await fbDelete('buchungen',bookingId);
-    const m=members.find(x=>x.id===b.memberId);
-    if(m){ m.balance=r2((m.balance||0)-b.totalVK); await fbUpdate('mitglieder',m.id,{balance:m.balance}); }
-    renderMembers();
-    if(historyMemberId) openHistoryModal(historyMemberId);
-    showToast('Buchung gelöscht.');
+    try {
+      await deleteBookingAtomically(bookingId);
+      if(historyMemberId) openHistoryModal(historyMemberId);
+      showToast('Buchung gelöscht.');
+    } catch(e) { console.error(e); showToast('Fehler beim Löschen.','error'); }
   });
 }
 window.deleteBooking=deleteBooking;
@@ -1105,12 +1292,22 @@ async function openHistoryModal(memberId) {
   historyMemberId=memberId;
   document.getElementById('histLabel').textContent=memberDisplayName(m);
   document.getElementById('histBalance').textContent=fEuro(m.balance||0);
-  const tbody=document.getElementById('histBody');
-  tbody.innerHTML='<tr><td colspan="5" class="p-4 text-center text-gray-400">Lade…</td></tr>';
   document.getElementById('modalHistory').classList.remove('hidden');
-  const all=await fbGetAll('buchungen');
-  const bks=all.filter(b=>b.memberId===memberId).sort((a,b)=>b.date.localeCompare(a.date));
+  refreshHistoryModal(memberId);
+}
+window.openHistoryModal=openHistoryModal;
+
+function refreshHistoryModal(memberId) {
+  const m=members.find(x=>x.id===memberId);
+  if(m) {
+    document.getElementById('histLabel').textContent=memberDisplayName(m);
+    document.getElementById('histBalance').textContent=fEuro(m.balance||0);
+  }
+  const tbody=document.getElementById('histBody');
   tbody.innerHTML='';
+  const bks = Object.values(buchungenCache)
+    .filter(b=>b.memberId===memberId)
+    .sort((a,b)=>b.date.localeCompare(a.date));
   if(!bks.length){ tbody.innerHTML='<tr><td colspan="5" class="p-3 text-center text-gray-400">Keine Buchungen.</td></tr>'; return; }
   bks.forEach(b=>{
     const row=document.createElement('tr');
@@ -1126,8 +1323,11 @@ async function openHistoryModal(memberId) {
     tbody.appendChild(row);
   });
 }
-window.openHistoryModal=openHistoryModal;
-document.getElementById('btnCloseHistory').addEventListener('click',()=>document.getElementById('modalHistory').classList.add('hidden'));
+
+document.getElementById('btnCloseHistory').addEventListener('click',()=>{
+  document.getElementById('modalHistory').classList.add('hidden');
+  historyMemberId=null;
+});
 
 // ── Abrechnen (Mitglied) ──
 function openSettleModal(memberId) {
@@ -1145,38 +1345,36 @@ window.settleFullAmt=settleFullAmt;
 document.getElementById('btnCancelSettle').addEventListener('click',()=>document.getElementById('modalSettle').classList.add('hidden'));
 document.getElementById('btnSaveSettle').addEventListener('click', async ()=>{
   if(!settleMemberId) return;
-  const m=members.find(x=>x.id===settleMemberId);
   const paid=parseFloat(document.getElementById('settlePaid').value)||0;
   const date=document.getElementById('settleDate').value;
   if(paid<=0){ showToast('Bitte Betrag eingeben.','error'); return; }
   if(!date){ showToast('Bitte Datum wählen.','error'); return; }
-  const all=await fbGetAll('buchungen');
-  const open=all.filter(b=>b.memberId===settleMemberId&&!b.settled);
-  let rem=paid;
-  for(const b of open){ if(rem<=0) break; await fbUpdate('buchungen',b.id,{settled:true,settledAt:date}); rem-=b.totalVK; }
-  m.balance=r2((m.balance||0)-paid);
-  await fbUpdate('mitglieder',settleMemberId,{balance:m.balance});
-  renderMembers();
-  document.getElementById('modalSettle').classList.add('hidden');
-  showToast(`Abrechnung gespeichert: ${fEuro(paid)} bezahlt.`);
+  const m=members.find(x=>x.id===settleMemberId);
+  const openBalance = r2(m?.balance||0);
+  if(paid > openBalance + 0.001){
+    showToast(`Betrag (${fEuro(paid)}) übersteigt den offenen Saldo (${fEuro(openBalance)}). Es werden maximal ${fEuro(openBalance)} abgerechnet.`,'warning');
+  }
+  try {
+    await settleAtomically(settleMemberId, paid, date);
+    document.getElementById('modalSettle').classList.add('hidden');
+    const effectivePaid = Math.min(r2(paid), openBalance);
+    showToast(`Abrechnung gespeichert: ${fEuro(effectivePaid)} bezahlt.`);
+  } catch(e) { console.error(e); showToast('Fehler bei der Abrechnung.','error'); }
 });
 
 // ══════════════════════════════════════════════════════════════
 // HEIMSPIELE
 // ══════════════════════════════════════════════════════════════
-async function loadGames() {
-  try {
-    games = await fbGetAll('spiele');
-    renderGames();
-  } catch(e){ console.error(e); }
-}
+// loadGames() entfällt – kommt via onSnapshot
 
 function renderGames() {
   const c=document.getElementById('gamesContainer');
-  games.sort((a,b)=>{ const da=new Date(a.date),db=new Date(b.date); return db-da; });
-  if(!games.length){ c.innerHTML='<p class="text-gray-400 text-center">Noch keine Spiele.</p>'; return; }
+  const sorted=[...games].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!sorted.length){ c.innerHTML='<p class="text-gray-400 text-center">Noch keine Spiele.</p>'; return; }
   c.innerHTML='';
-  games.forEach((g,i)=>{
+  sorted.forEach((g,i)=>{
+    // Index im Original-Array finden (wichtig für editGame/deleteGame)
+    const origIdx = games.indexOf(g);
     const fin=g.status==='finalized', rdy=g.status==='ready';
     const icon=fin?'<span class="text-green-600">✓</span>':rdy?'<span class="text-blue-600">✓</span>':'<span class="text-orange-500">⏳</span>';
     const statusTxt=fin?'<span class="text-xs text-green-600 font-medium">ABGERECHNET</span>':rdy?'<span class="text-xs text-blue-600 font-medium">BEREIT</span>':'<span class="text-xs text-orange-600 font-medium">ENTWURF</span>';
@@ -1195,23 +1393,21 @@ function renderGames() {
         </div>
       </div>
       <div class="flex gap-2">
-        ${g.pdfData?`<button onclick="showGamePDF(${i})" class="text-xl">📄</button>`:''}
-        ${!fin?`<button onclick="editGame(${i})" class="text-xl">✏️</button>`:''}
-        ${!fin?`<button onclick="deleteGame(${i})" class="text-xl text-red-500">🗑️</button>`:''}
+        ${g.pdfData?`<button onclick="showGamePDF('${g.id}')" class="text-xl">📄</button>`:''}
+        ${!fin?`<button onclick="editGame('${g.id}')" class="text-xl">✏️</button>`:''}
+        ${!fin?`<button onclick="deleteGame('${g.id}')" class="text-xl text-red-500">🗑️</button>`:''}
       </div>`;
     c.appendChild(div);
   });
 }
 
-// ── PDF eines finalisierten Spiels anzeigen ──
-function showGamePDF(i) {
-  const g = games[i];
-  if (!g.pdfData) return;
+function showGamePDF(gameId) {
+  const g = games.find(x => x.id === gameId || x.firebaseId === gameId);
+  if (!g?.pdfData) return;
   openPdfDataUri(g.pdfData);
 }
 window.showGamePDF=showGamePDF;
 
-// ── Neues Spiel ──
 document.getElementById('btnNewGame').addEventListener('click',()=>{
   editGameIdx=null; clearGameForm();
   document.getElementById('gDate').value=today();
@@ -1243,7 +1439,6 @@ function addGuestRow() {
 }
 document.getElementById('btnAddGuestRow').addEventListener('click',addGuestRow);
 
-// ── Getränke/Essen für Gast ──
 function openGuestDrinks(row) {
   activeGuestRow=row; activeGuestRowType='drinks';
   const tbody=document.getElementById('gDrinksBody'); tbody.innerHTML='';
@@ -1390,19 +1585,19 @@ document.getElementById('btnSaveGame').addEventListener('click', async ()=>{
   });
   const allPaid=gaeste.length>0&&gaeste.every(g=>g.paid);
   const gData={team,opponent:opp,date,gaeste,status:allPaid?'ready':'draft'};
-  if(editGameIdx!==null){
-    const eg=games[editGameIdx]; gData.firebaseId=eg.firebaseId;
-    games[editGameIdx]=gData;
-    if(gData.firebaseId) await fbUpdate('spiele',gData.firebaseId,gData);
-    editGameIdx=null;
-  } else {
-    const fid=await fbAdd('spiele',gData); gData.firebaseId=fid;
-    games.push(gData);
-  }
-  renderGames();
-  document.getElementById('modalGame').classList.add('hidden');
-  clearGameForm();
-  showToast(`Spiel ${allPaid?'bereit':'als Entwurf'} gespeichert!`);
+  try {
+    if(editGameIdx!==null){
+      const eg=games[editGameIdx];
+      if(eg.firebaseId) await fbUpdate('spiele',eg.firebaseId,gData);
+      editGameIdx=null;
+    } else {
+      await fbAdd('spiele',gData);
+    }
+    document.getElementById('modalGame').classList.add('hidden');
+    clearGameForm();
+    showToast(`Spiel ${allPaid?'bereit':'als Entwurf'} gespeichert!`);
+    // renderGames() via onSnapshot
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern des Spiels.','error'); }
 });
 
 // ── Spiel finalisieren (PDF) ──
@@ -1443,21 +1638,28 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async ()=>{
   pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`,10,pdoc.lastAutoTable.finalY+10);
   const pdfData=pdoc.output('datauristring');
   gData.pdfData=pdfData; gData.pdfCreatedAt=new Date().toISOString();
-  let fid;
-  if(editGameIdx!==null){ const eg=games[editGameIdx]; gData.firebaseId=eg.firebaseId; games[editGameIdx]=gData; fid=gData.firebaseId;
-    if(fid) await fbUpdate('spiele',fid,gData); editGameIdx=null;
-  } else { fid=await fbAdd('spiele',gData); gData.firebaseId=fid; games.push(gData); }
-  renderGames();
-  document.getElementById('modalGame').classList.add('hidden');
-  clearGameForm();
-  openPdfDataUri(pdfData);
-  showToast('Spiel final abgerechnet!');
+  try {
+    if(editGameIdx!==null){
+      const eg=games[editGameIdx];
+      if(eg.firebaseId) await fbUpdate('spiele',eg.firebaseId,gData);
+      editGameIdx=null;
+    } else {
+      await fbAdd('spiele',gData);
+    }
+    document.getElementById('modalGame').classList.add('hidden');
+    clearGameForm();
+    openPdfDataUri(pdfData);
+    showToast('Spiel final abgerechnet!');
+  } catch(e) { console.error(e); showToast('Fehler beim Finalisieren.','error'); }
 });
 
 // ── Spiel bearbeiten / löschen ──
-function editGame(i) {
-  const g=games[i]; if(g.status==='finalized'){ showToast('Finalisierte Spiele können nicht bearbeitet werden.','warning'); return; }
-  editGameIdx=i; clearGameForm();
+function editGame(gameId) {
+  const g = games.find(x => x.id === gameId || x.firebaseId === gameId);
+  if(!g){ showToast('Spiel nicht gefunden.','error'); return; }
+  if(g.status==='finalized'){ showToast('Finalisierte Spiele können nicht bearbeitet werden.','warning'); return; }
+  editGameIdx = games.indexOf(g);
+  clearGameForm();
   document.getElementById('gTeam').value=g.team||'';
   document.getElementById('gOpponent').value=g.opponent||'';
   document.getElementById('gDate').value=g.date||'';
@@ -1477,24 +1679,27 @@ function editGame(i) {
 }
 window.editGame=editGame;
 
-function deleteGame(i) {
-  const g=games[i]; if(g.status==='finalized'){ showToast('Finalisierte Spiele können nicht gelöscht werden.','warning'); return; }
+function deleteGame(gameId) {
+  const g = games.find(x => x.id === gameId || x.firebaseId === gameId);
+  if(!g){ showToast('Spiel nicht gefunden.','error'); return; }
+  if(g.status==='finalized'){ showToast('Finalisierte Spiele können nicht gelöscht werden.','warning'); return; }
   showConfirm('Spiel wirklich löschen?', async ()=>{
-    if(g.firebaseId) await fbDelete('spiele',g.firebaseId);
-    games.splice(i,1); renderGames(); showToast('Spiel gelöscht.');
+    try {
+      if(g.firebaseId || g.id) await fbDelete('spiele', g.firebaseId || g.id);
+      showToast('Spiel gelöscht.');
+      // renderGames() via onSnapshot
+    } catch(e) { console.error(e); showToast('Fehler beim Löschen.','error'); }
   });
 }
 window.deleteGame=deleteGame;
 
 // ══════════════════════════════════════════════════════════════
 // AUSWERTUNGEN
+// Baut Report-Daten aus dem Cache (buchungenCache, games, abrechnungen)
 // ══════════════════════════════════════════════════════════════
-async function loadReports() {
-  const abrArr = await fbGetAll('abrechnungen');
-  abrechnungen = {};
-  abrArr.forEach(a => { abrechnungen[a.weekKey] = a; });
+function buildReportDataAndRender() {
+  const buchungen = Object.values(buchungenCache);
 
-  const buchungen = await fbGetAll('buchungen');
   const memberWeeks = {};
   buchungen.forEach(b => {
     if(!b.date||!b.items?.length) return;
@@ -1533,6 +1738,7 @@ async function loadReports() {
 
   reportData = { member: memberWeeks, game: gameWeeks };
 
+  // Jahres-Filter aktualisieren
   const years = new Set([
     ...Object.values(memberWeeks).map(w=>w.year),
     ...Object.values(gameWeeks).map(w=>w.year)
@@ -1546,6 +1752,11 @@ async function loadReports() {
 
   renderMemberReport(memberWeeks);
   renderGameReport(gameWeeks);
+}
+
+// loadReports() delegiert jetzt an buildReportDataAndRender
+function loadReports() {
+  buildReportDataAndRender();
 }
 
 function switchReportTab(tab) {
@@ -1646,7 +1857,6 @@ function showAbrechnungPDF(weekKey) {
 }
 window.showAbrechnungPDF=showAbrechnungPDF;
 
-// ── Details-Modals ──
 function showMemberWeekDetails(key) {
   const d=reportData.member[key]; if(!d) return;
   document.getElementById('wkDetailTitle').textContent=key;
@@ -1731,10 +1941,7 @@ document.getElementById('btnCreateAbrechnung').addEventListener('click', ()=>{
   if(!allKeys.size) { showToast('Keine Daten für eine Abrechnung vorhanden.','warning'); return; }
 
   const unprocessed = [...allKeys].sort().reverse().find(k => !abrechnungen[k]);
-  if(unprocessed) {
-    sel.value = unprocessed;
-    sel.dispatchEvent(new Event('change'));
-  }
+  if(unprocessed) { sel.value = unprocessed; sel.dispatchEvent(new Event('change')); }
 
   document.getElementById('modalCreateAbrechnung').classList.remove('hidden');
 });
@@ -1836,25 +2043,12 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   doc.autoTable({
     head:[['Artikel','Menge','EK','VK Mitglied','Delta']],
     body: heimBody,
-    startY: tableStartY,
-    tableWidth: colW,
-    margin:{ left:ML },
+    startY: tableStartY, tableWidth: colW, margin:{ left:ML },
     styles:{ fontSize:FS, cellPadding:CP },
     headStyles:{ fillColor:[50,110,50], textColor:255, fontStyle:'bold' },
     alternateRowStyles:{ fillColor:[235,248,235] },
-    columnStyles:{
-      0:{cellWidth:colW*0.40},
-      1:{halign:'center', cellWidth:colW*0.10},
-      2:{halign:'right',  cellWidth:colW*0.17},
-      3:{halign:'right',  cellWidth:colW*0.18},
-      4:{halign:'right',  cellWidth:colW*0.15}
-    },
-    didParseCell(d){
-      if(d.row.index===heimBody.length-1){
-        d.cell.styles.fontStyle='bold';
-        d.cell.styles.fillColor=[180,220,180];
-      }
-    }
+    columnStyles:{ 0:{cellWidth:colW*0.40},1:{halign:'center',cellWidth:colW*0.10},2:{halign:'right',cellWidth:colW*0.17},3:{halign:'right',cellWidth:colW*0.18},4:{halign:'right',cellWidth:colW*0.15} },
+    didParseCell(d){ if(d.row.index===heimBody.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,220,180]; } }
   });
   const heimEndY = doc.lastAutoTable.finalY;
 
@@ -1862,102 +2056,55 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   doc.autoTable({
     head:[['Artikel','Menge','EK','VK Gast','Delta']],
     body: gastBody,
-    startY: tableStartY,
-    tableWidth: colW,
-    margin:{ left: gastX },
+    startY: tableStartY, tableWidth: colW, margin:{ left: gastX },
     styles:{ fontSize:FS, cellPadding:CP },
     headStyles:{ fillColor:[160,40,40], textColor:255, fontStyle:'bold' },
     alternateRowStyles:{ fillColor:[255,240,240] },
-    columnStyles:{
-      0:{cellWidth:colW*0.40},
-      1:{halign:'center', cellWidth:colW*0.10},
-      2:{halign:'right',  cellWidth:colW*0.17},
-      3:{halign:'right',  cellWidth:colW*0.18},
-      4:{halign:'right',  cellWidth:colW*0.15}
-    },
-    didParseCell(d){
-      if(d.row.index===gastBody.length-1){
-        d.cell.styles.fontStyle='bold';
-        d.cell.styles.fillColor=[240,180,180];
-      }
-    }
+    columnStyles:{ 0:{cellWidth:colW*0.40},1:{halign:'center',cellWidth:colW*0.10},2:{halign:'right',cellWidth:colW*0.17},3:{halign:'right',cellWidth:colW*0.18},4:{halign:'right',cellWidth:colW*0.15} },
+    didParseCell(d){ if(d.row.index===gastBody.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[240,180,180]; } }
   });
   const gastEndY = doc.lastAutoTable.finalY;
 
   const bottomY = Math.max(heimEndY, gastEndY) + 4;
+  const c1x=ML, c2x=ML+thirdW+1, c3x=ML+thirdW*2+2, cW3=thirdW-2, FS2=8, CP2=2;
 
-  const c1x  = ML;
-  const c2x  = ML + thirdW + 1;
-  const c3x  = ML + thirdW*2 + 2;
-  const cW3  = thirdW - 2;
-  const FS2  = 8;
-  const CP2  = 2;
-
-  const summBody = [
-    ['Rohertrag Heim:',  heimDelta.toFixed(2)+' €'],
-    ['Rohertrag Gast:',  gastDelta.toFixed(2)+' €'],
+  const summBody=[
+    ['Rohertrag Heim:', heimDelta.toFixed(2)+' €'],
+    ['Rohertrag Gast:', gastDelta.toFixed(2)+' €'],
     ['Gesamtrohertrag:', gesamtRoh.toFixed(2)+' €'],
-    ['Gesamtumsatz:',    gesamtUmsatz.toFixed(2)+' €'],
+    ['Gesamtumsatz:', gesamtUmsatz.toFixed(2)+' €'],
   ];
   doc.autoTable({
-    head:[[{ content:'Zusammenfassung', colSpan:2,
-      styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body: summBody,
-    startY: bottomY,
-    tableWidth: cW3,
-    margin:{ left: c1x },
-    styles:{ fontSize:FS2, cellPadding:CP2 },
-    alternateRowStyles:{ fillColor:[245,245,245] },
-    columnStyles:{ 0:{fontStyle:'bold', cellWidth:cW3*0.58}, 1:{halign:'right', cellWidth:cW3*0.42} },
-    didParseCell(d){
-      if(d.row.index===2){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[210,210,210]; }
-      if(d.row.index===3){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,210,255]; d.cell.styles.fontSize=9.5; }
-    }
+    head:[[{ content:'Zusammenfassung', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
+    body: summBody, startY: bottomY, tableWidth: cW3, margin:{ left: c1x },
+    styles:{ fontSize:FS2, cellPadding:CP2 }, alternateRowStyles:{ fillColor:[245,245,245] },
+    columnStyles:{ 0:{fontStyle:'bold',cellWidth:cW3*0.58}, 1:{halign:'right',cellWidth:cW3*0.42} },
+    didParseCell(d){ if(d.row.index===2){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[210,210,210]; } if(d.row.index===3){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,210,255]; d.cell.styles.fontSize=9.5; } }
   });
-
-  const kontoBody = [
+  const kontoBody=[
     ['Kontostand Vorwoche:', kontoVor.toFixed(2)+' €'],
-    ['Delta diese Woche:',   gesamtRoh.toFixed(2)+' €'],
-    ['Neuer Kontostand:',    kontoNeu.toFixed(2)+' €'],
+    ['Delta diese Woche:', gesamtRoh.toFixed(2)+' €'],
+    ['Neuer Kontostand:', kontoNeu.toFixed(2)+' €'],
   ];
   doc.autoTable({
-    head:[[{ content:'Kontostand', colSpan:2,
-      styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body: kontoBody,
-    startY: doc.lastAutoTable.finalY + 2,
-    tableWidth: cW3,
-    margin:{ left: c1x },
-    styles:{ fontSize:FS2, cellPadding:CP2 },
-    alternateRowStyles:{ fillColor:[245,245,245] },
-    columnStyles:{ 0:{fontStyle:'bold', cellWidth:cW3*0.58}, 1:{halign:'right', cellWidth:cW3*0.42} },
-    didParseCell(d){
-      if(d.row.index===2){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,210,255]; d.cell.styles.fontSize=9.5; }
-    }
+    head:[[{ content:'Kontostand', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
+    body: kontoBody, startY: doc.lastAutoTable.finalY+2, tableWidth: cW3, margin:{ left: c1x },
+    styles:{ fontSize:FS2, cellPadding:CP2 }, alternateRowStyles:{ fillColor:[245,245,245] },
+    columnStyles:{ 0:{fontStyle:'bold',cellWidth:cW3*0.58}, 1:{halign:'right',cellWidth:cW3*0.42} },
+    didParseCell(d){ if(d.row.index===2){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,210,255]; d.cell.styles.fontSize=9.5; } }
   });
-
   doc.autoTable({
-    head:[[{ content:'Belege:', colSpan:2,
-      styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body:[ ['',''],['',''],['',''],['',''],['',''],['Auslagen gesamt:',''] ],
-    startY: bottomY,
-    tableWidth: cW3,
-    margin:{ left: c2x },
+    head:[[{ content:'Belege:', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
+    body:[['',''],['',''],['',''],['',''],['',''],['Auslagen gesamt:','']],
+    startY: bottomY, tableWidth: cW3, margin:{ left: c2x },
     styles:{ fontSize:FS2, cellPadding:CP2, minCellHeight:6 },
     columnStyles:{ 0:{cellWidth:cW3*0.5}, 1:{cellWidth:cW3*0.5} },
     didParseCell(d){ if(d.row.index===5){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[245,245,245]; } }
   });
-
   doc.autoTable({
-    head:[[{ content:'Unterschriften', colSpan:2,
-      styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body:[
-      ['Datum:',''], ['',''],
-      ['Unterschrift Dart:',''], ['',''],
-      ['Unterschrift TSV:',''],  ['','']
-    ],
-    startY: bottomY,
-    tableWidth: cW3,
-    margin:{ left: c3x },
+    head:[[{ content:'Unterschriften', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
+    body:[['Datum:',''],['',''],['Unterschrift Dart:',''],['',''],['Unterschrift TSV:',''],['','']],
+    startY: bottomY, tableWidth: cW3, margin:{ left: c3x },
     styles:{ fontSize:FS2, cellPadding:CP2, minCellHeight:6 },
     columnStyles:{ 0:{cellWidth:cW3*0.45, fontStyle:'bold'}, 1:{cellWidth:cW3*0.55} },
     didParseCell(d){ if(d.row.index%2===1){ d.cell.styles.minCellHeight=9; } }
@@ -1966,28 +2113,23 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
   const pdfData = doc.output('datauristring');
 
   const abrData = {
-    weekKey, week:kwNum, year:kwYr,
-    kwRange: range.label,
-    kontoVor, kontoNeu,
-    gesamtRoh, gesamtUmsatz,
-    pdfData,
-    createdAt: new Date().toISOString()
+    weekKey, week:kwNum, year:kwYr, kwRange: range.label,
+    kontoVor, kontoNeu, gesamtRoh, gesamtUmsatz,
+    pdfData, createdAt: new Date().toISOString()
   };
-  const existingId = abrechnungen[weekKey]?.id;
-  if(existingId){
-    await fbUpdate('abrechnungen', existingId, abrData);
-  } else {
-    const newId = await fbAdd('abrechnungen', abrData);
-    abrData.id = newId;
-  }
-  abrechnungen[weekKey] = abrData;
-
-  renderMemberReport(reportData.member||{});
-  renderGameReport(reportData.game||{});
-
-  document.getElementById('modalCreateAbrechnung').classList.add('hidden');
-  openPdfDataUri(pdfData);
-  showToast(`Abrechnung ${weekKey} erstellt! Neuer Kontostand: ${kontoNeu.toFixed(2)} €`);
+  try {
+    const existingId = abrechnungen[weekKey]?.id;
+    if(existingId){
+      await fbUpdate('abrechnungen', existingId, abrData);
+    } else {
+      const newId = await fbAdd('abrechnungen', abrData);
+      abrData.id = newId;
+    }
+    // abrechnungen[weekKey] wird durch onSnapshot aktualisiert
+    document.getElementById('modalCreateAbrechnung').classList.add('hidden');
+    openPdfDataUri(pdfData);
+    showToast(`Abrechnung ${weekKey} erstellt! Neuer Kontostand: ${kontoNeu.toFixed(2)} €`);
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Abrechnung.','error'); }
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -2009,15 +2151,14 @@ MODALS.forEach(id=>{
 // ══════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════
-window.addEventListener('load',()=>{
+window.addEventListener('load', () => {
   showPage('members');
 
   function initData() {
-    loadMembers();
-    loadGames();
+    startRealtimeListeners();
   }
 
-  if(window.currentFirebaseUser) {
+  if (window.currentFirebaseUser) {
     initData();
   }
 
