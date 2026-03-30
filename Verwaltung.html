@@ -218,6 +218,7 @@
       </div>
       <button id="btnCreateAbrechnung" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 font-semibold">Abrechnung erstellen</button>
       <button id="btnExportReport"     class="bg-blue-600  text-white px-4 py-2 rounded hover:bg-blue-700  font-semibold">Als PDF exportieren</button>
+      <button id="btnExportGoBD"       class="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 font-semibold" title="GoBD-konformer Export: eine Zeile pro Buchungsposition">&#128203; GoBD-CSV exportieren</button>
     </div>
     <div id="report-members-wrap">
       <div class="overflow-x-auto bg-white shadow rounded mb-6">
@@ -389,7 +390,8 @@
           <tbody id="histBody"></tbody>
         </table>
       </div>
-      <div class="mt-4 text-right text-sm">
+      <div id="histPagination"></div>
+      <div class="mt-3 text-right text-sm">
         Offener Saldo: <span id="histBalance" class="font-bold text-red-600"></span>
       </div>
       <div class="flex justify-end mt-4">
@@ -610,40 +612,32 @@ const guestFoodList  = ARTICLES.filter(a => a.type === 'food'  && !a.legacyAlias
 // ══════════════════════════════════════════════════════════════
 // GLOBALER ZUSTAND
 // ══════════════════════════════════════════════════════════════
-let members = [];
-let games   = [];
-let editMemberId        = null;
-let bookingMemberId     = null;
-let bookingQty          = {};
-let editBookingId       = null;
-let editBookingQty      = {};
-let historyMemberId     = null;
-let settleMemberId      = null;
-let confirmCb           = null;
-let editGameIdx         = null;
-let activeGuestRow      = null;
-let activeGuestRowType  = null;
-let reportData          = { member:{}, game:{} };
-let currentReportTab    = 'members';
-let abrechnungen        = {};
+let members          = [];
+let games            = [];
+let editMemberId     = null;
+let bookingMemberId  = null;
+let bookingQty       = {};
+let editBookingId    = null;
+let editBookingQty   = {};
+let historyMemberId  = null;
+let historyPage      = 0;
+const HIST_PAGE_SIZE = 10;
+const HIST_MAX_TOTAL = 20;
+let settleMemberId   = null;
+let confirmCb        = null;
+let editGameId       = null;   // Firebase-ID des gerade bearbeiteten Spiels (null = neu)
+let activeGuestRow   = null;
+let reportData       = { member:{}, game:{} };
+let currentReportTab = 'members';
+let abrechnungen     = {};
+let buchungenCache   = {};
 
-// Echtzeit-Listener Handles (zum Abmelden beim Logout)
-let unsubMembers    = null;
-let unsubBuchungen  = null;
-let unsubGames      = null;
-let unsubAbrech     = null;
-
-// Buchungen im Speicher (für schnellen Zugriff ohne neu laden)
-let buchungenCache  = {};  // id → buchung
-
-// ══════════════════════════════════════════════════════════════
-// SYNC-INDIKATOR
-// ══════════════════════════════════════════════════════════════
-function setSyncStatus(status, text) {
-  const ind = document.getElementById('syncIndicator');
-  ind.className = status === 'ok' ? '' : status;
-  document.getElementById('syncText').textContent = text;
-}
+// Listener-Handles
+let unsubMembers   = null;
+let unsubBuchungen = null;
+let unsubGames     = null;
+let unsubAbrech    = null;
+let listenersActive = false;  // Guard gegen doppelten Start
 
 // ══════════════════════════════════════════════════════════════
 // HELPERS
@@ -664,38 +658,45 @@ function getISOWeek(date) {
 }
 function kwRange(week, isoYear) {
   const jan4 = new Date(Date.UTC(isoYear, 0, 4));
-  const dayOfWeek = jan4.getUTCDay() || 7;
-  const mondayW1 = new Date(jan4);
-  mondayW1.setUTCDate(jan4.getUTCDate() - (dayOfWeek - 1));
-  const start = new Date(mondayW1);
-  start.setUTCDate(mondayW1.getUTCDate() + (week - 1) * 7);
+  const dow   = jan4.getUTCDay() || 7;
+  const mon1  = new Date(jan4);
+  mon1.setUTCDate(jan4.getUTCDate() - (dow - 1));
+  const start = new Date(mon1);
+  start.setUTCDate(mon1.getUTCDate() + (week - 1) * 7);
   const end = new Date(start);
   end.setUTCDate(start.getUTCDate() + 6);
   const fmt = d => `${String(d.getUTCDate()).padStart(2,'0')}.${String(d.getUTCMonth()+1).padStart(2,'0')}.${d.getUTCFullYear()}`;
-  const iso = d => d.toISOString().split('T')[0];
+  const iso  = d => d.toISOString().split('T')[0];
   return { start: iso(start), end: iso(end), label: `${fmt(start)}–${fmt(end)}` };
 }
 
 function showToast(msg, type='success') {
-  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  document.querySelectorAll('.toast').forEach(t => t.remove());
   const t = document.createElement('div');
-  t.className=`toast ${type}`; t.textContent=msg;
+  t.className = `toast ${type}`; t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(()=>t.classList.add('show'),80);
-  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); },3200);
+  setTimeout(() => t.classList.add('show'), 80);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3200);
 }
+
 function showConfirm(msg, cb) {
   document.getElementById('confirmMsg').textContent = msg;
   confirmCb = cb;
   document.getElementById('modalConfirm').classList.remove('hidden');
 }
-document.getElementById('btnConfirmCancel').addEventListener('click', ()=>{
-  document.getElementById('modalConfirm').classList.add('hidden'); confirmCb=null;
+document.getElementById('btnConfirmCancel').addEventListener('click', () => {
+  document.getElementById('modalConfirm').classList.add('hidden'); confirmCb = null;
 });
-document.getElementById('btnConfirmOk').addEventListener('click', ()=>{
-  if(confirmCb){ confirmCb(); confirmCb=null; }
+document.getElementById('btnConfirmOk').addEventListener('click', () => {
+  if (confirmCb) { confirmCb(); confirmCb = null; }
   document.getElementById('modalConfirm').classList.add('hidden');
 });
+
+function setSyncStatus(status, text) {
+  const ind = document.getElementById('syncIndicator');
+  ind.className = (status === 'ok') ? '' : status;
+  document.getElementById('syncText').textContent = text;
+}
 
 function openPdfDataUri(dataUri) {
   try {
@@ -706,7 +707,7 @@ function openPdfDataUri(dataUri) {
     for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
     const blob = new Blob([ab], { type: 'application/pdf' });
     const url  = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
+    const win  = window.open(url, '_blank');
     if (!win) {
       const a = document.createElement('a');
       a.href = url; a.download = 'abrechnung.pdf';
@@ -721,139 +722,87 @@ function openPdfDataUri(dataUri) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// FIREBASE HELPERS – alle balance-kritischen Ops als Transaction
+// FIREBASE HELPERS
 // ══════════════════════════════════════════════════════════════
-const DB   = () => window.firebaseDB;
-const FU   = () => window.firebaseUtils;
+const DB = () => window.firebaseDB;
+const FU = () => window.firebaseUtils;
 
-/** Einfaches addDoc */
 async function fbAdd(coll, data) {
   const r = await FU().addDoc(FU().collection(DB(), coll), { ...data, createdAt: new Date().toISOString() });
   return r.id;
 }
-
-/** Einfaches updateDoc */
 async function fbUpdate(coll, id, data) {
   await FU().updateDoc(FU().doc(DB(), coll, id), { ...data, updatedAt: new Date().toISOString() });
 }
-
-/** Alle Docs einer Collection laden (Einmalabruf) */
 async function fbGetAll(coll) {
   const snap = await FU().getDocs(FU().collection(DB(), coll));
   const res = []; snap.forEach(d => res.push({ id: d.id, ...d.data() })); return res;
 }
-
 async function fbDelete(coll, id) {
   await FU().deleteDoc(FU().doc(DB(), coll, id));
 }
 
-/**
- * ATOMARE BUCHUNG HINZUFÜGEN
- * Liest den Mitglieds-Saldo innerhalb einer Transaction und addiert den Betrag.
- * Schreibt gleichzeitig die Buchung (als addDoc außerhalb geht nicht in Transaction,
- * daher: Buchung zuerst mit addDoc anlegen, dann Member-Balance in Transaction updaten).
- *
- * Strategie: addDoc für Buchung, dann runTransaction für Member-Balance.
- * Die Transaction liest den aktuellen Wert aus Firestore und schreibt atomar.
- */
+// ── Atomare Balance-Operationen ──
+
 async function addBookingAtomically(memberId, bookingData) {
-  // 1. Buchung anlegen
   const bkId = await fbAdd('buchungen', bookingData);
-
-  // 2. Member-Balance atomar updaten (Transaction verhindert Race Condition)
   const memberRef = FU().doc(DB(), 'mitglieder', memberId);
-  await FU().runTransaction(DB(), async (tx) => {
-    const memberSnap = await tx.get(memberRef);
-    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
-    const currentBalance = memberSnap.data().balance || 0;
-    const newBalance = r2(currentBalance + bookingData.totalVK);
-    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+  await FU().runTransaction(DB(), async tx => {
+    const snap = await tx.get(memberRef);
+    if (!snap.exists()) throw new Error('Mitglied nicht gefunden');
+    tx.update(memberRef, { balance: r2((snap.data().balance||0) + bookingData.totalVK), updatedAt: new Date().toISOString() });
   });
-
   return bkId;
 }
 
-/**
- * ATOMARES BUCHUNG-UPDATE
- * Liest alte Buchung + Member-Balance in einer Transaction.
- */
 async function updateBookingAtomically(bookingId, newItems, newVK, newEK) {
-  const bkRef     = FU().doc(DB(), 'buchungen', bookingId);
-
-  // Erst alte Buchung lesen um memberId und alten VK zu kennen
+  const bkRef  = FU().doc(DB(), 'buchungen', bookingId);
   const oldSnap = await FU().getDoc(bkRef);
   if (!oldSnap.exists()) throw new Error('Buchung nicht gefunden');
   const old = oldSnap.data();
-  const memberId = old.memberId;
   const delta = r2(newVK - old.totalVK);
-
-  const memberRef = FU().doc(DB(), 'mitglieder', memberId);
-
-  await FU().runTransaction(DB(), async (tx) => {
-    const memberSnap = await tx.get(memberRef);
-    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
-    const currentBalance = memberSnap.data().balance || 0;
-    const newBalance = r2(currentBalance + delta);
+  const memberRef = FU().doc(DB(), 'mitglieder', old.memberId);
+  await FU().runTransaction(DB(), async tx => {
+    const mSnap = await tx.get(memberRef);
+    if (!mSnap.exists()) throw new Error('Mitglied nicht gefunden');
     tx.update(bkRef, { items: newItems, totalVK: r2(newVK), totalEK: r2(newEK), updatedAt: new Date().toISOString() });
-    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+    tx.update(memberRef, { balance: r2((mSnap.data().balance||0) + delta), updatedAt: new Date().toISOString() });
   });
-
-  return { memberId, delta };
+  return old.memberId;
 }
 
-/**
- * ATOMARES BUCHUNG-LÖSCHEN
- */
 async function deleteBookingAtomically(bookingId) {
-  const bkRef = FU().doc(DB(), 'buchungen', bookingId);
+  const bkRef  = FU().doc(DB(), 'buchungen', bookingId);
   const oldSnap = await FU().getDoc(bkRef);
   if (!oldSnap.exists()) throw new Error('Buchung nicht gefunden');
   const old = oldSnap.data();
-  const memberId = old.memberId;
-  const memberRef = FU().doc(DB(), 'mitglieder', memberId);
-
-  await FU().runTransaction(DB(), async (tx) => {
-    const memberSnap = await tx.get(memberRef);
-    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
-    const currentBalance = memberSnap.data().balance || 0;
-    const newBalance = r2(currentBalance - old.totalVK);
+  const memberRef = FU().doc(DB(), 'mitglieder', old.memberId);
+  await FU().runTransaction(DB(), async tx => {
+    const mSnap = await tx.get(memberRef);
+    if (!mSnap.exists()) throw new Error('Mitglied nicht gefunden');
     tx.delete(bkRef);
-    tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+    tx.update(memberRef, { balance: r2((mSnap.data().balance||0) - old.totalVK), updatedAt: new Date().toISOString() });
   });
-
-  return memberId;
+  return old.memberId;
 }
 
-/**
- * ATOMARES ABRECHNEN (Settle)
- * Liest offene Buchungen + Member-Balance in einer Transaction.
- */
 async function settleAtomically(memberId, paid, settleDate) {
-  // Offene Buchungen aus Cache holen, älteste zuerst
   const allBk = Object.values(buchungenCache)
     .filter(b => b.memberId === memberId && !b.settled)
     .sort((a, b2) => a.date.localeCompare(b2.date));
-
   const memberRef = FU().doc(DB(), 'mitglieder', memberId);
-
-  await FU().runTransaction(DB(), async (tx) => {
-    const memberSnap = await tx.get(memberRef);
-    if (!memberSnap.exists()) throw new Error('Mitglied nicht gefunden');
-    const currentBalance = memberSnap.data().balance || 0;
-
-    // Saldo darf nicht unter 0 fallen – bezahlt maximal so viel wie offen
-    const effectivePaid = Math.min(r2(paid), r2(currentBalance));
-    const newBalance = r2(currentBalance - effectivePaid);
-
-    // Buchungen als bezahlt markieren, solange das Guthaben reicht
+  await FU().runTransaction(DB(), async tx => {
+    const mSnap = await tx.get(memberRef);
+    if (!mSnap.exists()) throw new Error('Mitglied nicht gefunden');
+    const currentBalance = mSnap.data().balance || 0;
+    const effectivePaid  = Math.min(r2(paid), r2(currentBalance));
+    const newBalance     = r2(currentBalance - effectivePaid);
     let rem = effectivePaid;
     for (const b of allBk) {
       if (rem <= 0) break;
-      const bkRef = FU().doc(DB(), 'buchungen', b.id);
-      tx.update(bkRef, { settled: true, settledAt: settleDate, updatedAt: new Date().toISOString() });
+      tx.update(FU().doc(DB(), 'buchungen', b.id), { settled: true, settledAt: settleDate, updatedAt: new Date().toISOString() });
       rem = r2(rem - b.totalVK);
     }
-
     tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
   });
 }
@@ -862,73 +811,53 @@ async function settleAtomically(memberId, paid, settleDate) {
 // ECHTZEIT-LISTENER
 // ══════════════════════════════════════════════════════════════
 function startRealtimeListeners() {
+  if (listenersActive) return;  // Guard: niemals doppelt starten
+  listenersActive = true;
   document.getElementById('syncIndicator').classList.remove('hidden');
   setSyncStatus('syncing', 'Verbinde…');
 
-  // ── Mitglieder ──
-  unsubMembers = FU().onSnapshot(
-    FU().collection(DB(), 'mitglieder'),
-    (snap) => {
-      members = [];
-      snap.forEach(d => members.push({ id: d.id, ...d.data() }));
-      members.sort((a,b) => (a.lastname||a.name||'').localeCompare(b.lastname||b.name||'', 'de'));
-      renderMembers();
-      // Offenen History-Modal aktualisieren
-      if (historyMemberId && !document.getElementById('modalHistory').classList.contains('hidden')) {
-        openHistoryModal(historyMemberId);
-      }
-      setSyncStatus('ok', 'Verbunden');
-    },
-    (err) => {
-      console.error('Mitglieder-Listener Fehler:', err);
-      setSyncStatus('error', 'Verbindungsfehler');
+  unsubMembers = FU().onSnapshot(FU().collection(DB(), 'mitglieder'), snap => {
+    members = [];
+    snap.forEach(d => members.push({ id: d.id, ...d.data() }));
+    members.sort((a,b) => (a.lastname||a.name||'').localeCompare(b.lastname||b.name||'', 'de'));
+    renderMembers();
+    // History-Modal saldo aktualisieren (ohne Seite zu resetten)
+    if (historyMemberId && !document.getElementById('modalHistory').classList.contains('hidden')) {
+      refreshHistoryModal(historyMemberId);
     }
-  );
+    setSyncStatus('ok', 'Verbunden');
+  }, err => {
+    console.error('Mitglieder-Listener:', err);
+    setSyncStatus('error', 'Verbindungsfehler');
+  });
 
-  // ── Buchungen ──
-  unsubBuchungen = FU().onSnapshot(
-    FU().collection(DB(), 'buchungen'),
-    (snap) => {
-      buchungenCache = {};
-      snap.forEach(d => { buchungenCache[d.id] = { id: d.id, ...d.data() }; });
-      // History-Modal aktualisieren falls offen
-      if (historyMemberId && !document.getElementById('modalHistory').classList.contains('hidden')) {
-        refreshHistoryModal(historyMemberId);
-      }
-      // Reports neu laden falls Auswertungsseite aktiv
-      if (!document.getElementById('page-reports').classList.contains('hidden')) {
-        buildReportDataAndRender();
-      }
-    },
-    (err) => { console.error('Buchungen-Listener Fehler:', err); }
-  );
+  unsubBuchungen = FU().onSnapshot(FU().collection(DB(), 'buchungen'), snap => {
+    buchungenCache = {};
+    snap.forEach(d => { buchungenCache[d.id] = { id: d.id, ...d.data() }; });
+    if (historyMemberId && !document.getElementById('modalHistory').classList.contains('hidden')) {
+      refreshHistoryModal(historyMemberId);
+    }
+    if (!document.getElementById('page-reports').classList.contains('hidden')) {
+      buildReportDataAndRender();
+    }
+  }, err => { console.error('Buchungen-Listener:', err); });
 
-  // ── Spiele ──
-  unsubGames = FU().onSnapshot(
-    FU().collection(DB(), 'spiele'),
-    (snap) => {
-      games = [];
-      snap.forEach(d => games.push({ id: d.id, firebaseId: d.id, ...d.data() }));
-      renderGames();
-      if (!document.getElementById('page-reports').classList.contains('hidden')) {
-        buildReportDataAndRender();
-      }
-    },
-    (err) => { console.error('Spiele-Listener Fehler:', err); }
-  );
+  unsubGames = FU().onSnapshot(FU().collection(DB(), 'spiele'), snap => {
+    games = [];
+    snap.forEach(d => games.push({ id: d.id, firebaseId: d.id, ...d.data() }));
+    renderGames();
+    if (!document.getElementById('page-reports').classList.contains('hidden')) {
+      buildReportDataAndRender();
+    }
+  }, err => { console.error('Spiele-Listener:', err); });
 
-  // ── Abrechnungen ──
-  unsubAbrech = FU().onSnapshot(
-    FU().collection(DB(), 'abrechnungen'),
-    (snap) => {
-      abrechnungen = {};
-      snap.forEach(d => { const data = { id: d.id, ...d.data() }; abrechnungen[data.weekKey] = data; });
-      if (!document.getElementById('page-reports').classList.contains('hidden')) {
-        buildReportDataAndRender();
-      }
-    },
-    (err) => { console.error('Abrechnungen-Listener Fehler:', err); }
-  );
+  unsubAbrech = FU().onSnapshot(FU().collection(DB(), 'abrechnungen'), snap => {
+    abrechnungen = {};
+    snap.forEach(d => { const data = { id: d.id, ...d.data() }; abrechnungen[data.weekKey] = data; });
+    if (!document.getElementById('page-reports').classList.contains('hidden')) {
+      buildReportDataAndRender();
+    }
+  }, err => { console.error('Abrechnungen-Listener:', err); });
 }
 
 function stopRealtimeListeners() {
@@ -936,6 +865,7 @@ function stopRealtimeListeners() {
   if (unsubBuchungen) { unsubBuchungen(); unsubBuchungen = null; }
   if (unsubGames)     { unsubGames();     unsubGames = null; }
   if (unsubAbrech)    { unsubAbrech();    unsubAbrech = null; }
+  listenersActive = false;
   document.getElementById('syncIndicator').classList.add('hidden');
 }
 window.unsubscribeAll = stopRealtimeListeners;
@@ -947,12 +877,12 @@ function showPage(page) {
   ['members','games','reports'].forEach(p => {
     document.getElementById('page-'+p).classList.add('hidden');
     const b = document.getElementById('btn-'+p);
-    if(b){ b.classList.remove('bg-gray-400'); b.classList.add('bg-gray-300'); }
+    if (b) { b.classList.remove('bg-gray-400'); b.classList.add('bg-gray-300'); }
   });
   document.getElementById('page-'+page).classList.remove('hidden');
   const ab = document.getElementById('btn-'+page);
-  if(ab){ ab.classList.remove('bg-gray-300'); ab.classList.add('bg-gray-400'); }
-  if(page === 'reports') buildReportDataAndRender();
+  if (ab) { ab.classList.remove('bg-gray-300'); ab.classList.add('bg-gray-400'); }
+  if (page === 'reports') buildReportDataAndRender();
 }
 window.showPage = showPage;
 
@@ -965,14 +895,14 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
   const pwd   = document.getElementById('loginPassword').value;
   const btn   = document.getElementById('loginButton');
   const err   = document.getElementById('loginError');
-  btn.disabled=true; btn.textContent='Anmelden…'; err.classList.add('hidden');
+  btn.disabled = true; btn.textContent = 'Anmelden…'; err.classList.add('hidden');
   try {
-    if(!window.firebaseReady) await new Promise(r=>window.addEventListener('firebaseReady',r,{once:true}));
+    if (!window.firebaseReady) await new Promise(r => window.addEventListener('firebaseReady', r, { once: true }));
     await window.authUtils.signInWithEmailAndPassword(window.firebaseAuth, email, pwd);
-    showPage('members'); showToast('Erfolgreich angemeldet!');
+    // onAuthStateChanged übernimmt den Rest
   } catch {
-    err.textContent='Ungültige E-Mail oder Passwort.'; err.classList.remove('hidden');
-  } finally { btn.disabled=false; btn.textContent='Anmelden'; }
+    err.textContent = 'Ungültige E-Mail oder Passwort.'; err.classList.remove('hidden');
+  } finally { btn.disabled = false; btn.textContent = 'Anmelden'; }
 });
 
 async function doLogout() {
@@ -987,8 +917,6 @@ window.doLogout = doLogout;
 // ══════════════════════════════════════════════════════════════
 // MITGLIEDER
 // ══════════════════════════════════════════════════════════════
-// loadMembers() entfällt – Daten kommen via onSnapshot
-
 function memberDisplayName(m) {
   return m.lastname ? `${m.lastname}, ${m.firstname||''}` : (m.name||'');
 }
@@ -1005,15 +933,15 @@ function renderMembers() {
     `${active.length} aktiv${inactive.length ? ', '+inactive.length+' inaktiv' : ''}`;
 
   const c = document.getElementById('membersContainer');
-  if(!members.length){ c.innerHTML='<p class="text-gray-400 text-center mt-8">Noch keine Mitglieder angelegt.</p>'; return; }
+  if (!members.length) { c.innerHTML = '<p class="text-gray-400 text-center mt-8">Noch keine Mitglieder angelegt.</p>'; return; }
 
-  c.innerHTML='';
+  c.innerHTML = '';
   const wrapper = document.createElement('div');
   wrapper.className = 'table-scroll';
   const tbl = document.createElement('table');
-  tbl.className='w-full border-collapse bg-white shadow rounded overflow-hidden';
+  tbl.className = 'w-full border-collapse bg-white shadow rounded overflow-hidden';
   tbl.style.minWidth = '600px';
-  tbl.innerHTML=`
+  tbl.innerHTML = `
     <thead class="bg-gray-200"><tr>
       <th class="p-3 border text-left">Name</th>
       <th class="p-3 border text-center">Buchen</th>
@@ -1028,28 +956,29 @@ function renderMembers() {
   c.appendChild(wrapper);
   const tbody = document.getElementById('membersTbody');
 
-  [...active,...inactive].forEach(m => {
+  [...active, ...inactive].forEach(m => {
     const inact = m.isActive === false;
-    const bal = m.balance || 0;
-    const dn  = memberDisplayName(m);
-    const pd  = m.preference_drink || '–';
-    const row = document.createElement('tr');
-    if(inact) row.classList.add('inactive-row');
-    row.innerHTML=`
+    const bal   = m.balance || 0;
+    const dn    = memberDisplayName(m);
+    const pd    = m.preference_drink || '–';
+    const row   = document.createElement('tr');
+    if (inact) row.classList.add('inactive-row');
+    row.innerHTML = `
       <td class="p-3 border font-medium">${esc(dn)}</td>
       <td class="p-3 border text-center">
-        ${!inact?`<button onclick="openBookingModal('${m.id}')"
-          class="bg-gray-700 hover:bg-gray-900 text-white text-xs font-bold px-3 py-1 rounded">+ Buchen</button>`:'–'}
+        ${!inact ? `<button onclick="openBookingModal('${m.id}')"
+          class="bg-gray-700 hover:bg-gray-900 text-white text-xs font-bold px-3 py-1 rounded">+ Buchen</button>` : '–'}
       </td>
       <td class="p-3 border text-gray-600 text-sm">
         ${esc(pd)}
-        ${!inact&&m.preference_drink?`<button onclick="quickFav('${m.id}')" title="Lieblingsgetränk +1"
-          class="ml-1 bg-green-100 hover:bg-green-200 border border-green-400 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">+1</button>`:''}
+        ${!inact && m.preference_drink ? `<button onclick="quickFav('${m.id}')" title="Lieblingsgetränk +1"
+          class="ml-1 bg-green-100 hover:bg-green-200 border border-green-400 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">+1</button>` : ''}
       </td>
       <td class="p-3 border text-right"><span class="${bal>0?'bal-pos':'bal-zero'}">${fEuro(bal)}</span></td>
       <td class="p-3 border text-center">
-        ${!inact&&bal>0?`<button onclick="openSettleModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">💰</button>`
-          :(!inact?'<span class="text-green-500 text-xs">✓ beglichen</span>':'–')}
+        ${!inact && bal > 0
+          ? `<button onclick="openSettleModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">💰</button>`
+          : (!inact ? '<span class="text-green-500 text-xs">✓ beglichen</span>' : '–')}
       </td>
       <td class="p-3 border text-center">
         <button onclick="openHistoryModal('${m.id}')" class="text-xl hover:scale-110 transition-transform">📋</button>
@@ -1057,9 +986,9 @@ function renderMembers() {
       <td class="p-3 border text-center">
         <button onclick="openEditMember('${m.id}')" class="text-lg mr-1 hover:scale-110 transition-transform">✏️</button>
         ${!inact
-          ?`<button onclick="deactivateMember('${m.id}')" class="text-lg text-red-500 hover:scale-110 transition-transform"></button>`
-          :`<button onclick="reactivateMember('${m.id}')" class="text-lg text-green-600 hover:scale-110 transition-transform"
-             ${bal>0?'disabled style="opacity:.4;cursor:not-allowed"':''}>♻️</button>`}
+          ? `<button onclick="deactivateMember('${m.id}')" class="text-lg text-red-500 hover:scale-110 transition-transform"></button>`
+          : `<button onclick="reactivateMember('${m.id}')" class="text-lg text-green-600 hover:scale-110 transition-transform"
+               ${bal > 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>♻️</button>`}
       </td>`;
     tbody.appendChild(row);
   });
@@ -1068,56 +997,53 @@ function renderMembers() {
 // ── Modal: Mitglied anlegen/bearbeiten ──
 function buildPrefDrinkOpts(sel='') {
   const s = document.getElementById('inPrefDrink');
-  s.innerHTML='<option value="">– kein –</option>';
-  ARTICLES.filter(a=>a.type==='drink').forEach(a=>{
-    const o=document.createElement('option');
-    o.value=a.name; o.textContent=`${a.name} (${fEuro(a.memberPrice)})`;
-    if(a.name===sel) o.selected=true;
+  s.innerHTML = '<option value="">– kein –</option>';
+  ARTICLES.filter(a => a.type === 'drink').forEach(a => {
+    const o = document.createElement('option');
+    o.value = a.name; o.textContent = `${a.name} (${fEuro(a.memberPrice)})`;
+    if (a.name === sel) o.selected = true;
     s.appendChild(o);
   });
 }
-document.getElementById('btnNewMember').addEventListener('click',()=>{
-  editMemberId=null;
-  document.getElementById('mbrModalTitle').textContent='Mitglied anlegen';
-  document.getElementById('inFirstname').value='';
-  document.getElementById('inLastname').value='';
+document.getElementById('btnNewMember').addEventListener('click', () => {
+  editMemberId = null;
+  document.getElementById('mbrModalTitle').textContent = 'Mitglied anlegen';
+  document.getElementById('inFirstname').value = '';
+  document.getElementById('inLastname').value  = '';
   buildPrefDrinkOpts();
   document.getElementById('modalMember').classList.remove('hidden');
 });
-document.getElementById('btnCancelMember').addEventListener('click',()=>document.getElementById('modalMember').classList.add('hidden'));
+document.getElementById('btnCancelMember').addEventListener('click', () => document.getElementById('modalMember').classList.add('hidden'));
 
 function openEditMember(id) {
-  const m=members.find(x=>x.id===id); if(!m) return;
-  editMemberId=id;
-  document.getElementById('mbrModalTitle').textContent='Mitglied bearbeiten';
-  document.getElementById('inFirstname').value=m.firstname||'';
-  document.getElementById('inLastname').value=m.lastname||m.name||'';
-  buildPrefDrinkOpts(m.preference_drink||'');
+  const m = members.find(x => x.id === id); if (!m) return;
+  editMemberId = id;
+  document.getElementById('mbrModalTitle').textContent = 'Mitglied bearbeiten';
+  document.getElementById('inFirstname').value = m.firstname || '';
+  document.getElementById('inLastname').value  = m.lastname  || m.name || '';
+  buildPrefDrinkOpts(m.preference_drink || '');
   document.getElementById('modalMember').classList.remove('hidden');
 }
-window.openEditMember=openEditMember;
+window.openEditMember = openEditMember;
 
-document.getElementById('btnSaveMember').addEventListener('click', async ()=>{
-  const fn=document.getElementById('inFirstname').value.trim();
-  const ln=document.getElementById('inLastname').value.trim();
-  if(!fn||!ln){ showToast('Bitte Vor- und Nachname eingeben.','error'); return; }
-  const pd=document.getElementById('inPrefDrink').value;
-  const name=`${ln}, ${fn}`;
+document.getElementById('btnSaveMember').addEventListener('click', async () => {
+  const fn = document.getElementById('inFirstname').value.trim();
+  const ln = document.getElementById('inLastname').value.trim();
+  if (!fn || !ln) { showToast('Bitte Vor- und Nachname eingeben.', 'error'); return; }
+  const pd   = document.getElementById('inPrefDrink').value;
+  const name = `${ln}, ${fn}`;
   try {
-    if(editMemberId){
-      await fbUpdate('mitglieder',editMemberId,{firstname:fn,lastname:ln,name,preference_drink:pd});
+    if (editMemberId) {
+      await fbUpdate('mitglieder', editMemberId, { firstname:fn, lastname:ln, name, preference_drink:pd });
       showToast('Mitglied aktualisiert.');
     } else {
-      const data={firstname:fn,lastname:ln,name,preference_drink:pd,balance:0,isActive:true};
-      await fbAdd('mitglieder',data);
+      await fbAdd('mitglieder', { firstname:fn, lastname:ln, name, preference_drink:pd, balance:0, isActive:true });
       showToast('Mitglied hinzugefügt!');
     }
-    // renderMembers() wird automatisch durch onSnapshot ausgelöst
     document.getElementById('modalMember').classList.add('hidden');
-  } catch(e){ console.error(e); showToast('Fehler beim Speichern.','error'); }
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern.', 'error'); }
 });
 
-// ── Deaktivieren / Reaktivieren ──
 async function deactivateMember(id) {
   showConfirm('Mitglied wirklich deaktivieren?', async () => {
     await fbUpdate('mitglieder', id, { isActive: false });
@@ -1134,44 +1060,45 @@ window.reactivateMember = reactivateMember;
 
 // ── Schnellbuchung Lieblingsgetränk ──
 async function quickFav(memberId) {
-  const m=members.find(x=>x.id===memberId); if(!m||!m.preference_drink) return;
-  const art=ARTICLES.find(a=>a.name===m.preference_drink);
-  if(!art){ showToast('Artikel nicht gefunden.','error'); return; }
-  showConfirm(`1× „${art.name}" (${fEuro(art.memberPrice)}) für ${memberDisplayName(m)} buchen?`, async ()=>{
+  const m = members.find(x => x.id === memberId); if (!m || !m.preference_drink) return;
+  const art = ARTICLES.find(a => a.name === m.preference_drink);
+  if (!art) { showToast('Artikel nicht gefunden.', 'error'); return; }
+  showConfirm(`1× „${art.name}" (${fEuro(art.memberPrice)}) für ${memberDisplayName(m)} buchen?`, async () => {
     try {
-      const bk={memberId,date:today(),
-        items:[{articleId:art.id,name:art.name,type:art.type,qty:1,sellPrice:art.memberPrice,buyPrice:art.buyPrice}],
-        totalVK:art.memberPrice,totalEK:art.buyPrice,settled:false,settledAt:null};
-      await addBookingAtomically(memberId, bk);
+      await addBookingAtomically(memberId, {
+        memberId, date: today(),
+        items: [{ articleId:art.id, name:art.name, type:art.type, qty:1, sellPrice:art.memberPrice, buyPrice:art.buyPrice }],
+        totalVK: art.memberPrice, totalEK: art.buyPrice, settled: false, settledAt: null
+      });
       showToast(`+1 ${art.name} für ${memberDisplayName(m)} gebucht.`);
-    } catch(e) { console.error(e); showToast('Fehler beim Buchen.','error'); }
+    } catch(e) { console.error(e); showToast('Fehler beim Buchen.', 'error'); }
   });
 }
-window.quickFav=quickFav;
+window.quickFav = quickFav;
 
 // ── Buchung erfassen ──
 function openBookingModal(memberId) {
-  const m=members.find(x=>x.id===memberId); if(!m) return;
-  bookingMemberId=memberId; bookingQty={};
-  document.getElementById('bookingLabel').textContent=`Buchung für: ${memberDisplayName(m)}`;
-  const di=document.getElementById('bkDate'); di.value=today(); di.min=today();
+  const m = members.find(x => x.id === memberId); if (!m) return;
+  bookingMemberId = memberId; bookingQty = {};
+  document.getElementById('bookingLabel').textContent = `Buchung für: ${memberDisplayName(m)}`;
+  const di = document.getElementById('bkDate'); di.value = today(); di.min = today();
   buildBkGrids(); updateBkSums(); switchBkTab('bkDrinks');
   document.getElementById('modalBooking').classList.remove('hidden');
 }
-window.openBookingModal=openBookingModal;
+window.openBookingModal = openBookingModal;
 
 function buildBkGrids() {
-  buildArtGrid('bkDrinksGrid','drink',bookingQty,'bk',changeBkQty);
-  buildArtGrid('bkFoodGrid','food',bookingQty,'bk',changeBkQty);
+  buildArtGrid('bkDrinksGrid', 'drink', bookingQty, 'bk', changeBkQty);
+  buildArtGrid('bkFoodGrid',   'food',  bookingQty, 'bk', changeBkQty);
 }
 function buildArtGrid(containerId, type, qtyMap, prefix, changeFn) {
-  const c=document.getElementById(containerId); c.innerHTML='';
-  ARTICLES.filter(a=>a.type===type && !a.legacyAlias).forEach(art=>{
-    const qty=qtyMap[art.id]||0;
-    const card=document.createElement('div');
-    card.className=`art-card ${qty>0?'selected':''}`;
-    card.id=`${prefix}card-${art.id}`;
-    card.innerHTML=`
+  const c = document.getElementById(containerId); c.innerHTML = '';
+  ARTICLES.filter(a => a.type === type && !a.legacyAlias).forEach(art => {
+    const qty  = qtyMap[art.id] || 0;
+    const card = document.createElement('div');
+    card.className = `art-card ${qty > 0 ? 'selected' : ''}`;
+    card.id = `${prefix}card-${art.id}`;
+    card.innerHTML = `
       <div class="text-sm font-semibold leading-tight">${esc(art.name)}</div>
       <div class="text-xs text-gray-500 mt-0.5">${fEuro(art.memberPrice)}</div>
       <div class="qty-ctrl">
@@ -1183,204 +1110,255 @@ function buildArtGrid(containerId, type, qtyMap, prefix, changeFn) {
   });
 }
 function changeBkQty(id, d) {
-  bookingQty[id]=Math.max(0,(bookingQty[id]||0)+d);
-  document.getElementById(`bkqty-${id}`).textContent=bookingQty[id];
-  document.getElementById(`bkcard-${id}`).classList.toggle('selected',bookingQty[id]>0);
+  bookingQty[id] = Math.max(0, (bookingQty[id]||0) + d);
+  document.getElementById(`bkqty-${id}`).textContent = bookingQty[id];
+  document.getElementById(`bkcard-${id}`).classList.toggle('selected', bookingQty[id] > 0);
   updateBkSums();
 }
-window.changeBkQty=changeBkQty;
+window.changeBkQty = changeBkQty;
 function updateBkSums() {
-  let sd=0,sf=0;
-  ARTICLES.forEach(a=>{ const q=bookingQty[a.id]||0; if(q>0){ if(a.type==='drink')sd+=a.memberPrice*q; else sf+=a.memberPrice*q; } });
-  document.getElementById('bkSumDrinks').textContent=fEuro(sd);
-  document.getElementById('bkSumFood').textContent=fEuro(sf);
-  document.getElementById('bkTotal').textContent=fEuro(sd+sf);
+  let sd = 0, sf = 0;
+  ARTICLES.forEach(a => { const q = bookingQty[a.id]||0; if (q > 0) { if (a.type==='drink') sd+=a.memberPrice*q; else sf+=a.memberPrice*q; } });
+  document.getElementById('bkSumDrinks').textContent = fEuro(sd);
+  document.getElementById('bkSumFood').textContent   = fEuro(sf);
+  document.getElementById('bkTotal').textContent     = fEuro(sd+sf);
 }
 function switchBkTab(tab) {
-  document.querySelectorAll('#modalBooking .tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  document.getElementById('tabBkDrinks').classList.toggle('hidden',tab!=='bkDrinks');
-  document.getElementById('tabBkFood').classList.toggle('hidden',tab!=='bkFood');
+  document.querySelectorAll('#modalBooking .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tabBkDrinks').classList.toggle('hidden', tab !== 'bkDrinks');
+  document.getElementById('tabBkFood').classList.toggle('hidden',   tab !== 'bkFood');
 }
-window.switchBkTab=switchBkTab;
-document.getElementById('btnCancelBooking').addEventListener('click',()=>document.getElementById('modalBooking').classList.add('hidden'));
-document.getElementById('btnSaveBooking').addEventListener('click', async ()=>{
-  if(!bookingMemberId) return;
-  const items=[]; let vk=0,ek=0;
-  ARTICLES.forEach(a=>{ const q=bookingQty[a.id]||0; if(q>0){
-    items.push({articleId:a.id,name:a.name,type:a.type,qty:q,sellPrice:a.memberPrice,buyPrice:a.buyPrice});
-    vk+=a.memberPrice*q; ek+=a.buyPrice*q;
+window.switchBkTab = switchBkTab;
+document.getElementById('btnCancelBooking').addEventListener('click', () => document.getElementById('modalBooking').classList.add('hidden'));
+document.getElementById('btnSaveBooking').addEventListener('click', async () => {
+  if (!bookingMemberId) return;
+  const items = []; let vk = 0, ek = 0;
+  ARTICLES.forEach(a => { const q = bookingQty[a.id]||0; if (q > 0) {
+    items.push({ articleId:a.id, name:a.name, type:a.type, qty:q, sellPrice:a.memberPrice, buyPrice:a.buyPrice });
+    vk += a.memberPrice*q; ek += a.buyPrice*q;
   }});
-  if(!items.length){ showToast('Bitte mindestens einen Artikel wählen.','error'); return; }
-  const date=document.getElementById('bkDate').value;
-  if(!date){ showToast('Bitte Datum wählen.','error'); return; }
+  if (!items.length) { showToast('Bitte mindestens einen Artikel wählen.', 'error'); return; }
+  const date = document.getElementById('bkDate').value;
+  if (!date) { showToast('Bitte Datum wählen.', 'error'); return; }
   try {
-    await addBookingAtomically(bookingMemberId, {
-      memberId:bookingMemberId,date,items,totalVK:r2(vk),totalEK:r2(ek),settled:false,settledAt:null
-    });
+    await addBookingAtomically(bookingMemberId, { memberId:bookingMemberId, date, items, totalVK:r2(vk), totalEK:r2(ek), settled:false, settledAt:null });
     document.getElementById('modalBooking').classList.add('hidden');
     showToast(`Buchung gespeichert: ${fEuro(vk)}`);
-  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Buchung.','error'); }
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Buchung.', 'error'); }
 });
 
 // ── Buchung bearbeiten ──
 async function openEditBookingModal(bookingId) {
   const b = buchungenCache[bookingId];
-  if(!b) { showToast('Buchung nicht gefunden.','error'); return; }
-  editBookingId=bookingId; editBookingQty={};
-  b.items.forEach(i=>{ editBookingQty[i.articleId]=i.qty; });
-  const m=members.find(x=>x.id===b.memberId);
-  document.getElementById('editBkLabel').textContent=`Buchung vom ${fDate(b.date)}${m?' – '+memberDisplayName(m):''}`;
-  buildArtGrid('ebDrinksGrid','drink',editBookingQty,'eb',changeEbQty);
-  buildArtGrid('ebFoodGrid','food',editBookingQty,'eb',changeEbQty);
+  if (!b) { showToast('Buchung nicht gefunden.', 'error'); return; }
+  editBookingId = bookingId; editBookingQty = {};
+  b.items.forEach(i => { editBookingQty[i.articleId] = i.qty; });
+  const m = members.find(x => x.id === b.memberId);
+  document.getElementById('editBkLabel').textContent = `Buchung vom ${fDate(b.date)}${m ? ' – '+memberDisplayName(m) : ''}`;
+  buildArtGrid('ebDrinksGrid', 'drink', editBookingQty, 'eb', changeEbQty);
+  buildArtGrid('ebFoodGrid',   'food',  editBookingQty, 'eb', changeEbQty);
   updateEbSums(); switchEbTab('ebDrinks');
   document.getElementById('modalHistory').classList.add('hidden');
   document.getElementById('modalEditBooking').classList.remove('hidden');
 }
-window.openEditBookingModal=openEditBookingModal;
+window.openEditBookingModal = openEditBookingModal;
+
 function changeEbQty(id, d) {
-  editBookingQty[id]=Math.max(0,(editBookingQty[id]||0)+d);
-  document.getElementById(`ebqty-${id}`).textContent=editBookingQty[id];
-  document.getElementById(`ebcard-${id}`).classList.toggle('selected',editBookingQty[id]>0);
+  editBookingQty[id] = Math.max(0, (editBookingQty[id]||0) + d);
+  document.getElementById(`ebqty-${id}`).textContent = editBookingQty[id];
+  document.getElementById(`ebcard-${id}`).classList.toggle('selected', editBookingQty[id] > 0);
   updateEbSums();
 }
-window.changeEbQty=changeEbQty;
+window.changeEbQty = changeEbQty;
 function updateEbSums() {
-  let sd=0,sf=0;
-  ARTICLES.forEach(a=>{ const q=editBookingQty[a.id]||0; if(q>0){ if(a.type==='drink')sd+=a.memberPrice*q; else sf+=a.memberPrice*q; } });
-  document.getElementById('ebSumDrinks').textContent=fEuro(sd);
-  document.getElementById('ebSumFood').textContent=fEuro(sf);
-  document.getElementById('ebTotal').textContent=fEuro(sd+sf);
+  let sd = 0, sf = 0;
+  ARTICLES.forEach(a => { const q = editBookingQty[a.id]||0; if (q > 0) { if (a.type==='drink') sd+=a.memberPrice*q; else sf+=a.memberPrice*q; } });
+  document.getElementById('ebSumDrinks').textContent = fEuro(sd);
+  document.getElementById('ebSumFood').textContent   = fEuro(sf);
+  document.getElementById('ebTotal').textContent     = fEuro(sd+sf);
 }
 function switchEbTab(tab) {
-  document.querySelectorAll('#modalEditBooking .tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-  document.getElementById('tabEbDrinks').classList.toggle('hidden',tab!=='ebDrinks');
-  document.getElementById('tabEbFood').classList.toggle('hidden',tab!=='ebFood');
+  document.querySelectorAll('#modalEditBooking .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tabEbDrinks').classList.toggle('hidden', tab !== 'ebDrinks');
+  document.getElementById('tabEbFood').classList.toggle('hidden',   tab !== 'ebFood');
 }
-window.switchEbTab=switchEbTab;
-document.getElementById('btnCancelEditBk').addEventListener('click',()=>document.getElementById('modalEditBooking').classList.add('hidden'));
-document.getElementById('btnSaveEditBk').addEventListener('click', async ()=>{
-  if(!editBookingId) return;
-  const items=[]; let vk=0,ek=0;
-  ARTICLES.forEach(a=>{ const q=editBookingQty[a.id]||0; if(q>0){
-    items.push({articleId:a.id,name:a.name,type:a.type,qty:q,sellPrice:a.memberPrice,buyPrice:a.buyPrice});
-    vk+=a.memberPrice*q; ek+=a.buyPrice*q;
+window.switchEbTab = switchEbTab;
+document.getElementById('btnCancelEditBk').addEventListener('click', () => document.getElementById('modalEditBooking').classList.add('hidden'));
+document.getElementById('btnSaveEditBk').addEventListener('click', async () => {
+  if (!editBookingId) return;
+  const items = []; let vk = 0, ek = 0;
+  ARTICLES.forEach(a => { const q = editBookingQty[a.id]||0; if (q > 0) {
+    items.push({ articleId:a.id, name:a.name, type:a.type, qty:q, sellPrice:a.memberPrice, buyPrice:a.buyPrice });
+    vk += a.memberPrice*q; ek += a.buyPrice*q;
   }});
-  if(!items.length){ showToast('Bitte mindestens einen Artikel wählen.','error'); return; }
+  if (!items.length) { showToast('Bitte mindestens einen Artikel wählen.', 'error'); return; }
   try {
-    const { memberId } = await updateBookingAtomically(editBookingId, items, r2(vk), r2(ek));
+    await updateBookingAtomically(editBookingId, items, r2(vk), r2(ek));
     document.getElementById('modalEditBooking').classList.add('hidden');
-    if(historyMemberId) openHistoryModal(historyMemberId);
+    if (historyMemberId) {
+      document.getElementById('modalHistory').classList.remove('hidden');
+      refreshHistoryModal(historyMemberId);
+    }
     showToast('Buchung aktualisiert.');
-  } catch(e) { console.error(e); showToast('Fehler beim Aktualisieren.','error'); }
+  } catch(e) { console.error(e); showToast('Fehler beim Aktualisieren.', 'error'); }
 });
 
-// ── Buchung löschen ──
 async function deleteBooking(bookingId) {
-  showConfirm('Buchung wirklich löschen?', async ()=>{
+  showConfirm('Buchung wirklich löschen?', async () => {
     try {
       await deleteBookingAtomically(bookingId);
-      if(historyMemberId) openHistoryModal(historyMemberId);
       showToast('Buchung gelöscht.');
-    } catch(e) { console.error(e); showToast('Fehler beim Löschen.','error'); }
+    } catch(e) { console.error(e); showToast('Fehler beim Löschen.', 'error'); }
   });
 }
-window.deleteBooking=deleteBooking;
+window.deleteBooking = deleteBooking;
 
-// ── Verlauf ──
-async function openHistoryModal(memberId) {
-  const m=members.find(x=>x.id===memberId); if(!m) return;
-  historyMemberId=memberId;
-  document.getElementById('histLabel').textContent=memberDisplayName(m);
-  document.getElementById('histBalance').textContent=fEuro(m.balance||0);
+// ── Buchungsverlauf ──
+function openHistoryModal(memberId) {
+  const m = members.find(x => x.id === memberId); if (!m) return;
+  historyMemberId = memberId;
+  historyPage = 0;  // Beim Öffnen immer auf Seite 1
+  document.getElementById('histLabel').textContent   = memberDisplayName(m);
+  document.getElementById('histBalance').textContent = fEuro(m.balance||0);
   document.getElementById('modalHistory').classList.remove('hidden');
   refreshHistoryModal(memberId);
 }
-window.openHistoryModal=openHistoryModal;
+window.openHistoryModal = openHistoryModal;
 
 function refreshHistoryModal(memberId) {
-  const m=members.find(x=>x.id===memberId);
-  if(m) {
-    document.getElementById('histLabel').textContent=memberDisplayName(m);
-    document.getElementById('histBalance').textContent=fEuro(m.balance||0);
+  const m = members.find(x => x.id === memberId);
+  if (m) {
+    document.getElementById('histLabel').textContent   = memberDisplayName(m);
+    document.getElementById('histBalance').textContent = fEuro(m.balance||0);
   }
-  const tbody=document.getElementById('histBody');
-  tbody.innerHTML='';
-  const bks = Object.values(buchungenCache)
-    .filter(b=>b.memberId===memberId)
-    .sort((a,b)=>b.date.localeCompare(a.date));
-  if(!bks.length){ tbody.innerHTML='<tr><td colspan="5" class="p-3 text-center text-gray-400">Keine Buchungen.</td></tr>'; return; }
-  bks.forEach(b=>{
-    const row=document.createElement('tr');
-    row.innerHTML=`
+
+  // Alle Buchungen des Mitglieds, neuste zuerst, max. HIST_MAX_TOTAL
+  const allBks = Object.values(buchungenCache)
+    .filter(b => b.memberId === memberId)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, HIST_MAX_TOTAL);
+
+  const tbody = document.getElementById('histBody');
+  const pg    = document.getElementById('histPagination');
+  tbody.innerHTML = '';
+  pg.innerHTML    = '';
+
+  if (!allBks.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-gray-400">Keine Buchungen.</td></tr>';
+    return;
+  }
+
+  const totalPages = Math.ceil(allBks.length / HIST_PAGE_SIZE);
+  historyPage = Math.max(0, Math.min(historyPage, totalPages - 1));
+  const pageBks = allBks.slice(historyPage * HIST_PAGE_SIZE, (historyPage + 1) * HIST_PAGE_SIZE);
+
+  pageBks.forEach(b => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
       <td class="p-2 border text-sm">${fDate(b.date)}</td>
       <td class="p-2 border text-sm">${esc(b.items.map(i=>`${i.name} ×${i.qty}`).join(', '))}</td>
       <td class="p-2 border text-right text-sm font-semibold">${fEuro(b.totalVK)}</td>
-      <td class="p-2 border text-center text-xs">${b.settled?`<span class="text-green-600">✓ ${b.settledAt?fDate(b.settledAt):''}</span>`:'<span class="text-orange-500">offen</span>'}</td>
+      <td class="p-2 border text-center text-xs">${b.settled
+        ? `<span class="text-green-600">✓ ${b.settledAt ? fDate(b.settledAt) : ''}</span>`
+        : '<span class="text-orange-500">offen</span>'}</td>
       <td class="p-2 border text-center">
-        ${!b.settled?`<button onclick="openEditBookingModal('${b.id}')" class="text-base mr-1">✏️</button>
-          <button onclick="deleteBooking('${b.id}')" class="text-base text-red-500">🗑️</button>`:'<span class="text-gray-300 text-xs">–</span>'}
+        ${!b.settled
+          ? `<button onclick="openEditBookingModal('${b.id}')" class="text-base mr-1">✏️</button>
+             <button onclick="deleteBooking('${b.id}')" class="text-base text-red-500">🗑️</button>`
+          : '<span class="text-gray-300 text-xs">–</span>'}
       </td>`;
     tbody.appendChild(row);
   });
+
+  // Pagination-Controls
+  const totalInDB = Object.values(buchungenCache).filter(b => b.memberId === memberId).length;
+  const wrap = document.createElement('div');
+  wrap.className = 'flex items-center justify-between mt-3';
+
+  const info = document.createElement('span');
+  info.className = 'text-xs text-gray-500';
+  info.textContent = totalPages > 1
+    ? `Seite ${historyPage+1} von ${totalPages}${totalInDB > HIST_MAX_TOTAL ? ` (letzte ${HIST_MAX_TOTAL} von ${totalInDB})` : ''}`
+    : (totalInDB > HIST_MAX_TOTAL ? `Letzte ${HIST_MAX_TOTAL} von ${totalInDB} Buchungen` : '');
+
+  const btnWrap = document.createElement('div');
+  btnWrap.className = 'flex gap-2';
+
+  if (totalPages > 1) {
+    const mkBtn = (label, disabled, onClick) => {
+      const b = document.createElement('button');
+      b.textContent = label; b.disabled = disabled;
+      b.className = 'text-sm px-3 py-1 rounded border ' +
+        (disabled ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-blue-600 border-blue-300 hover:bg-blue-50');
+      if (!disabled) b.addEventListener('click', onClick);
+      return b;
+    };
+    btnWrap.appendChild(mkBtn('← Zurück', historyPage === 0,            () => { historyPage--; refreshHistoryModal(memberId); }));
+    btnWrap.appendChild(mkBtn('Weiter →', historyPage >= totalPages - 1, () => { historyPage++; refreshHistoryModal(memberId); }));
+  }
+
+  wrap.appendChild(info);
+  wrap.appendChild(btnWrap);
+  pg.appendChild(wrap);
 }
 
-document.getElementById('btnCloseHistory').addEventListener('click',()=>{
+document.getElementById('btnCloseHistory').addEventListener('click', () => {
   document.getElementById('modalHistory').classList.add('hidden');
-  historyMemberId=null;
+  historyMemberId = null;
 });
 
 // ── Abrechnen (Mitglied) ──
 function openSettleModal(memberId) {
-  const m=members.find(x=>x.id===memberId); if(!m) return;
-  settleMemberId=memberId;
-  document.getElementById('settleLabel').textContent=memberDisplayName(m);
-  document.getElementById('settleAmtDisplay').textContent=fEuro(m.balance||0);
-  document.getElementById('settlePaid').value=(m.balance||0).toFixed(2);
-  const sd=document.getElementById('settleDate'); sd.value=today(); sd.min=today();
+  const m = members.find(x => x.id === memberId); if (!m) return;
+  settleMemberId = memberId;
+  document.getElementById('settleLabel').textContent      = memberDisplayName(m);
+  document.getElementById('settleAmtDisplay').textContent = fEuro(m.balance||0);
+  document.getElementById('settlePaid').value             = (m.balance||0).toFixed(2);
+  const sd = document.getElementById('settleDate'); sd.value = today(); sd.min = today();
   document.getElementById('modalSettle').classList.remove('hidden');
 }
-window.openSettleModal=openSettleModal;
-function settleFullAmt() { const m=members.find(x=>x.id===settleMemberId); if(m) document.getElementById('settlePaid').value=(m.balance||0).toFixed(2); }
-window.settleFullAmt=settleFullAmt;
-document.getElementById('btnCancelSettle').addEventListener('click',()=>document.getElementById('modalSettle').classList.add('hidden'));
-document.getElementById('btnSaveSettle').addEventListener('click', async ()=>{
-  if(!settleMemberId) return;
-  const paid=parseFloat(document.getElementById('settlePaid').value)||0;
-  const date=document.getElementById('settleDate').value;
-  if(paid<=0){ showToast('Bitte Betrag eingeben.','error'); return; }
-  if(!date){ showToast('Bitte Datum wählen.','error'); return; }
-  const m=members.find(x=>x.id===settleMemberId);
+window.openSettleModal = openSettleModal;
+function settleFullAmt() {
+  const m = members.find(x => x.id === settleMemberId);
+  if (m) document.getElementById('settlePaid').value = (m.balance||0).toFixed(2);
+}
+window.settleFullAmt = settleFullAmt;
+document.getElementById('btnCancelSettle').addEventListener('click', () => document.getElementById('modalSettle').classList.add('hidden'));
+document.getElementById('btnSaveSettle').addEventListener('click', async () => {
+  if (!settleMemberId) return;
+  const paid = parseFloat(document.getElementById('settlePaid').value) || 0;
+  const date = document.getElementById('settleDate').value;
+  if (paid <= 0) { showToast('Bitte Betrag eingeben.', 'error'); return; }
+  if (!date)     { showToast('Bitte Datum wählen.', 'error'); return; }
+  const m = members.find(x => x.id === settleMemberId);
   const openBalance = r2(m?.balance||0);
-  if(paid > openBalance + 0.001){
-    showToast(`Betrag (${fEuro(paid)}) übersteigt den offenen Saldo (${fEuro(openBalance)}). Es werden maximal ${fEuro(openBalance)} abgerechnet.`,'warning');
+  if (paid > openBalance + 0.001) {
+    showToast(`Betrag (${fEuro(paid)}) übersteigt den offenen Saldo (${fEuro(openBalance)}). Es werden maximal ${fEuro(openBalance)} abgerechnet.`, 'warning');
   }
   try {
     await settleAtomically(settleMemberId, paid, date);
     document.getElementById('modalSettle').classList.add('hidden');
-    const effectivePaid = Math.min(r2(paid), openBalance);
-    showToast(`Abrechnung gespeichert: ${fEuro(effectivePaid)} bezahlt.`);
-  } catch(e) { console.error(e); showToast('Fehler bei der Abrechnung.','error'); }
+    showToast(`Abrechnung gespeichert: ${fEuro(Math.min(r2(paid), openBalance))} bezahlt.`);
+  } catch(e) { console.error(e); showToast('Fehler bei der Abrechnung.', 'error'); }
 });
 
 // ══════════════════════════════════════════════════════════════
 // HEIMSPIELE
 // ══════════════════════════════════════════════════════════════
-// loadGames() entfällt – kommt via onSnapshot
-
 function renderGames() {
-  const c=document.getElementById('gamesContainer');
-  const sorted=[...games].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  if(!sorted.length){ c.innerHTML='<p class="text-gray-400 text-center">Noch keine Spiele.</p>'; return; }
-  c.innerHTML='';
-  sorted.forEach((g,i)=>{
-    // Index im Original-Array finden (wichtig für editGame/deleteGame)
-    const origIdx = games.indexOf(g);
-    const fin=g.status==='finalized', rdy=g.status==='ready';
-    const icon=fin?'<span class="text-green-600">✓</span>':rdy?'<span class="text-blue-600">✓</span>':'<span class="text-orange-500">⏳</span>';
-    const statusTxt=fin?'<span class="text-xs text-green-600 font-medium">ABGERECHNET</span>':rdy?'<span class="text-xs text-blue-600 font-medium">BEREIT</span>':'<span class="text-xs text-orange-600 font-medium">ENTWURF</span>';
-    const div=document.createElement('div');
-    div.className='bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md';
-    div.innerHTML=`
+  const c = document.getElementById('gamesContainer');
+  const sorted = [...games].sort((a,b) => new Date(b.date) - new Date(a.date));
+  if (!sorted.length) { c.innerHTML = '<p class="text-gray-400 text-center">Noch keine Spiele.</p>'; return; }
+  c.innerHTML = '';
+  sorted.forEach(g => {
+    const fin = g.status === 'finalized', rdy = g.status === 'ready';
+    const icon      = fin ? '<span class="text-green-600">✓</span>' : rdy ? '<span class="text-blue-600">✓</span>' : '<span class="text-orange-500">⏳</span>';
+    const statusTxt = fin ? '<span class="text-xs text-green-600 font-medium">ABGERECHNET</span>'
+      : rdy ? '<span class="text-xs text-blue-600 font-medium">BEREIT</span>'
+      : '<span class="text-xs text-orange-600 font-medium">ENTWURF</span>';
+    const div = document.createElement('div');
+    div.className = 'bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md';
+    div.innerHTML = `
       <div>
         <div class="flex items-center gap-2 flex-wrap">
           <strong>${esc(g.team||'')}</strong><span class="text-gray-400">vs</span>
@@ -1388,40 +1366,47 @@ function renderGames() {
         </div>
         <div class="flex items-center gap-3 mt-1 flex-wrap">
           <span class="text-sm text-gray-500">${fDate(g.date)}</span>
-          <span class="text-sm text-gray-500">(${g.gaeste?g.gaeste.length:0} Gäste)</span>
+          <span class="text-sm text-gray-500">(${g.gaeste ? g.gaeste.length : 0} Gäste)</span>
           ${statusTxt}
         </div>
       </div>
       <div class="flex gap-2">
-        ${g.pdfData?`<button onclick="showGamePDF('${g.id}')" class="text-xl">📄</button>`:''}
-        ${!fin?`<button onclick="editGame('${g.id}')" class="text-xl">✏️</button>`:''}
-        ${!fin?`<button onclick="deleteGame('${g.id}')" class="text-xl text-red-500">🗑️</button>`:''}
+        ${g.pdfData ? `<button onclick="showGamePDF('${g.id}')" class="text-xl">📄</button>` : ''}
+        ${!fin ? `<button onclick="editGame('${g.id}')" class="text-xl">✏️</button>` : ''}
+        ${!fin ? `<button onclick="deleteGame('${g.id}')" class="text-xl text-red-500">🗑️</button>` : ''}
       </div>`;
     c.appendChild(div);
   });
 }
 
 function showGamePDF(gameId) {
-  const g = games.find(x => x.id === gameId || x.firebaseId === gameId);
+  const g = games.find(x => x.id === gameId);
   if (!g?.pdfData) return;
   openPdfDataUri(g.pdfData);
 }
-window.showGamePDF=showGamePDF;
+window.showGamePDF = showGamePDF;
 
-document.getElementById('btnNewGame').addEventListener('click',()=>{
-  editGameIdx=null; clearGameForm();
-  document.getElementById('gDate').value=today();
+document.getElementById('btnNewGame').addEventListener('click', () => {
+  editGameId = null; clearGameForm();
+  document.getElementById('gDate').value = today();
   initGuestRows();
   document.getElementById('modalGame').classList.remove('hidden');
   updateFinalizeBtn();
 });
-document.getElementById('btnCloseGame').addEventListener('click',()=>{ document.getElementById('modalGame').classList.add('hidden'); clearGameForm(); });
-function clearGameForm(){ document.getElementById('gTeam').value=''; document.getElementById('gOpponent').value=''; document.getElementById('gDate').value=''; document.querySelector('#guestTableBody').innerHTML=''; }
-function initGuestRows(){ for(let i=0;i<4;i++) addGuestRow(); }
+document.getElementById('btnCloseGame').addEventListener('click', () => {
+  document.getElementById('modalGame').classList.add('hidden'); clearGameForm();
+});
+function clearGameForm() {
+  document.getElementById('gTeam').value     = '';
+  document.getElementById('gOpponent').value = '';
+  document.getElementById('gDate').value     = '';
+  document.querySelector('#guestTableBody').innerHTML = '';
+}
+function initGuestRows() { for (let i = 0; i < 4; i++) addGuestRow(); }
 function addGuestRow() {
-  const tbody=document.getElementById('guestTableBody');
-  const row=document.createElement('tr');
-  row.innerHTML=`
+  const tbody = document.getElementById('guestTableBody');
+  const row   = document.createElement('tr');
+  row.innerHTML = `
     <td class="border p-2"><input type="text" class="border rounded w-full p-1" placeholder="Name"></td>
     <td class="border p-2"><button class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded btnGDrinks text-sm">+ Hinzufügen</button></td>
     <td class="border p-2"><button class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded btnGFood text-sm">+ Hinzufügen</button></td>
@@ -1429,364 +1414,379 @@ function addGuestRow() {
     <td class="border p-2 text-center"><button class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded btnGSettle text-sm">Abrechnen</button></td>
     <td class="border p-2 text-center"><button class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded btnGDel text-sm">X</button></td>`;
   tbody.appendChild(row);
-  row.querySelector('.btnGDrinks').addEventListener('click',()=>openGuestDrinks(row));
-  row.querySelector('.btnGFood').addEventListener('click',()=>openGuestFood(row));
-  row.querySelector('.btnGSettle').addEventListener('click',()=>openGuestSettle(row));
-  row.querySelector('.btnGDel').addEventListener('click',()=>{
-    const nm=row.querySelector('input').value.trim()||'diesen Gast';
-    showConfirm(`${nm} wirklich löschen?`,()=>{ row.remove(); updateFinalizeBtn(); });
+  row.querySelector('.btnGDrinks').addEventListener('click', () => openGuestDrinks(row));
+  row.querySelector('.btnGFood').addEventListener('click',   () => openGuestFood(row));
+  row.querySelector('.btnGSettle').addEventListener('click', () => openGuestSettle(row));
+  row.querySelector('.btnGDel').addEventListener('click', () => {
+    const nm = row.querySelector('input').value.trim() || 'diesen Gast';
+    showConfirm(`${nm} wirklich löschen?`, () => { row.remove(); updateFinalizeBtn(); });
   });
 }
-document.getElementById('btnAddGuestRow').addEventListener('click',addGuestRow);
+document.getElementById('btnAddGuestRow').addEventListener('click', addGuestRow);
 
+// ── Getränke/Essen für Gast ──
 function openGuestDrinks(row) {
-  activeGuestRow=row; activeGuestRowType='drinks';
-  const tbody=document.getElementById('gDrinksBody'); tbody.innerHTML='';
-  const saved=row.getAttribute('data-drinks'); const data=saved?JSON.parse(saved):{};
+  activeGuestRow = row;
+  const tbody  = document.getElementById('gDrinksBody'); tbody.innerHTML = '';
+  const saved  = row.getAttribute('data-drinks');
+  const data   = saved ? JSON.parse(saved) : {};
   guestDrinkList.filter(g => !g.disabled).forEach(g => {
-    const menge=data[g.name]||0;
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right">${g.preis.toFixed(2)} €</td>
+    const menge = data[g.name] || 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right">${g.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
         <input type="number" min="0" value="${menge}" class="gDrinkQty border rounded w-16 text-center p-1" data-preis="${g.preis}">
         <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gDPlus">+1</button>
       </div></td>
       <td class="p-2 border gDSum text-right">${(g.preis*menge).toFixed(2)} €</td>`;
-    const inp=tr.querySelector('.gDrinkQty');
-    inp.addEventListener('input',()=>{ tr.querySelector('.gDSum').textContent=(parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGDrinksSum(); });
-    tr.querySelector('.gDPlus').addEventListener('click',()=>{ inp.value=(parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
+    const inp = tr.querySelector('.gDrinkQty');
+    inp.addEventListener('input', () => { tr.querySelector('.gDSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGDrinksSum(); });
+    tr.querySelector('.gDPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
     tbody.appendChild(tr);
   });
   updateGDrinksSum();
   document.getElementById('modalGuestDrinks').classList.remove('hidden');
 }
 function updateGDrinksSum() {
-  let s=0; document.querySelectorAll('#gDrinksBody .gDSum').forEach(td=>s+=parseFloat(td.textContent)||0);
-  document.getElementById('gDrinksSum').textContent=s.toFixed(2);
+  let s = 0; document.querySelectorAll('#gDrinksBody .gDSum').forEach(td => s += parseFloat(td.textContent)||0);
+  document.getElementById('gDrinksSum').textContent = s.toFixed(2);
 }
-document.getElementById('btnSaveGDrinks').addEventListener('click',()=>{
-  if(!activeGuestRow) return;
-  const data={};
-  document.querySelectorAll('#gDrinksBody tr').forEach(tr=>{
-    const nm=tr.children[0].textContent.trim(); const q=parseInt(tr.querySelector('.gDrinkQty').value)||0;
-    if(q>0) data[nm]=q;
+document.getElementById('btnSaveGDrinks').addEventListener('click', () => {
+  if (!activeGuestRow) return;
+  const data = {};
+  document.querySelectorAll('#gDrinksBody tr').forEach(tr => {
+    const nm = tr.children[0].textContent.trim();
+    const q  = parseInt(tr.querySelector('.gDrinkQty').value) || 0;
+    if (q > 0) data[nm] = q;
   });
-  activeGuestRow.setAttribute('data-drinks',JSON.stringify(data));
+  activeGuestRow.setAttribute('data-drinks', JSON.stringify(data));
   updateGuestRowTotal(activeGuestRow);
   document.getElementById('modalGuestDrinks').classList.add('hidden');
-  activeGuestRow=null;
+  activeGuestRow = null;
 });
-document.getElementById('btnCloseGDrinks').addEventListener('click',()=>document.getElementById('modalGuestDrinks').classList.add('hidden'));
+document.getElementById('btnCloseGDrinks').addEventListener('click', () => document.getElementById('modalGuestDrinks').classList.add('hidden'));
 
 function openGuestFood(row) {
-  activeGuestRow=row;
-  const tbody=document.getElementById('gFoodBody'); tbody.innerHTML='';
-  const saved=row.getAttribute('data-food'); const data=saved?JSON.parse(saved):{};
+  activeGuestRow = row;
+  const tbody = document.getElementById('gFoodBody'); tbody.innerHTML = '';
+  const saved = row.getAttribute('data-food');
+  const data  = saved ? JSON.parse(saved) : {};
   guestFoodList.filter(g => !g.disabled).forEach(g => {
-    const menge=data[g.name]||0;
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right">${g.preis.toFixed(2)} €</td>
+    const menge = data[g.name] || 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right">${g.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
         <input type="number" min="0" value="${menge}" class="gFoodQty border rounded w-16 text-center p-1" data-preis="${g.preis}">
         <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gFPlus">+1</button>
       </div></td>
       <td class="p-2 border gFSum text-right">${(g.preis*menge).toFixed(2)} €</td>`;
-    const inp=tr.querySelector('.gFoodQty');
-    inp.addEventListener('input',()=>{ tr.querySelector('.gFSum').textContent=(parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGFoodSum(); });
-    tr.querySelector('.gFPlus').addEventListener('click',()=>{ inp.value=(parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
+    const inp = tr.querySelector('.gFoodQty');
+    inp.addEventListener('input', () => { tr.querySelector('.gFSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGFoodSum(); });
+    tr.querySelector('.gFPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
     tbody.appendChild(tr);
   });
   updateGFoodSum();
   document.getElementById('modalGuestFood').classList.remove('hidden');
 }
 function updateGFoodSum() {
-  let s=0; document.querySelectorAll('#gFoodBody .gFSum').forEach(td=>s+=parseFloat(td.textContent)||0);
-  document.getElementById('gFoodSum').textContent=s.toFixed(2);
+  let s = 0; document.querySelectorAll('#gFoodBody .gFSum').forEach(td => s += parseFloat(td.textContent)||0);
+  document.getElementById('gFoodSum').textContent = s.toFixed(2);
 }
-document.getElementById('btnSaveGFood').addEventListener('click',()=>{
-  if(!activeGuestRow) return;
-  const data={};
-  document.querySelectorAll('#gFoodBody tr').forEach(tr=>{
-    const nm=tr.children[0].textContent.trim(); const q=parseInt(tr.querySelector('.gFoodQty').value)||0;
-    if(q>0) data[nm]=q;
+document.getElementById('btnSaveGFood').addEventListener('click', () => {
+  if (!activeGuestRow) return;
+  const data = {};
+  document.querySelectorAll('#gFoodBody tr').forEach(tr => {
+    const nm = tr.children[0].textContent.trim();
+    const q  = parseInt(tr.querySelector('.gFoodQty').value) || 0;
+    if (q > 0) data[nm] = q;
   });
-  activeGuestRow.setAttribute('data-food',JSON.stringify(data));
+  activeGuestRow.setAttribute('data-food', JSON.stringify(data));
   updateGuestRowTotal(activeGuestRow);
   document.getElementById('modalGuestFood').classList.add('hidden');
-  activeGuestRow=null;
+  activeGuestRow = null;
 });
-document.getElementById('btnCloseGFood').addEventListener('click',()=>document.getElementById('modalGuestFood').classList.add('hidden'));
+document.getElementById('btnCloseGFood').addEventListener('click', () => document.getElementById('modalGuestFood').classList.add('hidden'));
 
 function updateGuestRowTotal(row) {
-  let s=0;
-  const dr=row.getAttribute('data-drinks'); if(dr){ const d=JSON.parse(dr); for(const[n,q]of Object.entries(d)){ const a=guestDrinkList.find(x=>x.name===n); if(a)s+=a.preis*q; } }
-  const fo=row.getAttribute('data-food');   if(fo){ const d=JSON.parse(fo);  for(const[n,q]of Object.entries(d)){ const a=guestFoodList.find(x=>x.name===n);  if(a)s+=a.preis*q; } }
-  row.querySelector('.gRowTotal').textContent=r2(s).toFixed(2)+' €';
+  let s = 0;
+  const dr = row.getAttribute('data-drinks'); if (dr) { const d = JSON.parse(dr); for (const [n,q] of Object.entries(d)) { const a = guestDrinkList.find(x=>x.name===n); if(a) s+=a.preis*q; } }
+  const fo = row.getAttribute('data-food');   if (fo) { const d = JSON.parse(fo);  for (const [n,q] of Object.entries(d)) { const a = guestFoodList.find(x=>x.name===n);  if(a) s+=a.preis*q; } }
+  row.querySelector('.gRowTotal').textContent = r2(s).toFixed(2)+' €';
 }
 
 function openGuestSettle(row) {
-  activeGuestRow=row;
-  const name=row.querySelector('input').value||'(unbekannt)';
-  const total=row.querySelector('.gRowTotal').textContent;
-  let html=`<div class="bg-gray-50 p-3 rounded"><p><strong>Gast:</strong> ${esc(name)}</p><p><strong>Gesamt:</strong> ${esc(total)}</p>`;
-  const dr=row.getAttribute('data-drinks'); if(dr){ const d=JSON.parse(dr); if(Object.keys(d).length){ html+='<p class="mt-2 font-semibold">Getränke:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q]of Object.entries(d)){ const a=guestDrinkList.find(x=>x.name===n); html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`; } html+='</ul>'; } }
-  const fo=row.getAttribute('data-food');   if(fo){ const d=JSON.parse(fo);  if(Object.keys(d).length){ html+='<p class="mt-2 font-semibold">Essen:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q]of Object.entries(d)){ const a=guestFoodList.find(x=>x.name===n);  html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`; } html+='</ul>'; } }
-  html+='</div>';
-  document.getElementById('gSettleContent').innerHTML=html;
-  document.getElementById('gTipInput').value='0.00';
+  activeGuestRow = row;
+  const name  = row.querySelector('input').value || '(unbekannt)';
+  const total = row.querySelector('.gRowTotal').textContent;
+  let html = `<div class="bg-gray-50 p-3 rounded"><p><strong>Gast:</strong> ${esc(name)}</p><p><strong>Gesamt:</strong> ${esc(total)}</p>`;
+  const dr = row.getAttribute('data-drinks');
+  if (dr) { const d=JSON.parse(dr); if (Object.keys(d).length) { html+='<p class="mt-2 font-semibold">Getränke:</p><ul class="list-disc ml-5 text-sm">'; for (const [n,q] of Object.entries(d)) { const a=guestDrinkList.find(x=>x.name===n); html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`; } html+='</ul>'; } }
+  const fo = row.getAttribute('data-food');
+  if (fo) { const d=JSON.parse(fo);  if (Object.keys(d).length) { html+='<p class="mt-2 font-semibold">Essen:</p><ul class="list-disc ml-5 text-sm">'; for (const [n,q] of Object.entries(d)) { const a=guestFoodList.find(x=>x.name===n);  html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`; } html+='</ul>'; } }
+  html += '</div>';
+  document.getElementById('gSettleContent').innerHTML = html;
+  document.getElementById('gTipInput').value = '0.00';
   setupTipBtns();
   document.getElementById('modalGuestSettle').classList.remove('hidden');
 }
 function setupTipBtns() {
-  ['gTip50','gTip100'].forEach(id=>{ const nb=document.getElementById(id).cloneNode(true); document.getElementById(id).replaceWith(nb); });
-  document.getElementById('gTip50').addEventListener('click',()=>{ const i=document.getElementById('gTipInput'); i.value=((parseFloat(i.value)||0)+0.5).toFixed(2); });
-  document.getElementById('gTip100').addEventListener('click',()=>{ const i=document.getElementById('gTipInput'); i.value=((parseFloat(i.value)||0)+1).toFixed(2); });
-}
-document.getElementById('btnGuestPaid').addEventListener('click',()=>{
-  if(!activeGuestRow) return;
-  const tip=parseFloat(document.getElementById('gTipInput').value)||0;
-  activeGuestRow.setAttribute('data-tip',tip.toFixed(2));
-  activeGuestRow.setAttribute('data-paid','true');
-  activeGuestRow.classList.add('bg-green-100');
-  activeGuestRow.querySelector('input').disabled=true;
-  activeGuestRow.querySelector('input').classList.add('bg-gray-200');
-  ['btnGDrinks','btnGFood','btnGSettle'].forEach(cls=>{
-    const b=activeGuestRow.querySelector('.'+cls);
-    if(b){ b.disabled=true; b.classList.replace('bg-blue-500','bg-gray-400'); b.classList.replace('bg-gray-500','bg-gray-400'); b.classList.add('cursor-not-allowed'); }
+  ['gTip50','gTip100'].forEach(id => {
+    const nb = document.getElementById(id).cloneNode(true);
+    document.getElementById(id).replaceWith(nb);
   });
-  const lastTd=activeGuestRow.querySelectorAll('td')[5];
-  if(lastTd) lastTd.innerHTML='<span class="text-green-600 text-xl">✓</span>';
+  document.getElementById('gTip50').addEventListener('click',  () => { const i=document.getElementById('gTipInput'); i.value=((parseFloat(i.value)||0)+0.5).toFixed(2); });
+  document.getElementById('gTip100').addEventListener('click', () => { const i=document.getElementById('gTipInput'); i.value=((parseFloat(i.value)||0)+1.0).toFixed(2); });
+}
+document.getElementById('btnGuestPaid').addEventListener('click', () => {
+  if (!activeGuestRow) return;
+  const tip = parseFloat(document.getElementById('gTipInput').value) || 0;
+  activeGuestRow.setAttribute('data-tip', tip.toFixed(2));
+  activeGuestRow.setAttribute('data-paid', 'true');
+  activeGuestRow.classList.add('bg-green-100');
+  activeGuestRow.querySelector('input').disabled = true;
+  activeGuestRow.querySelector('input').classList.add('bg-gray-200');
+  ['btnGDrinks','btnGFood','btnGSettle'].forEach(cls => {
+    const b = activeGuestRow.querySelector('.'+cls);
+    if (b) { b.disabled=true; b.classList.replace('bg-blue-500','bg-gray-400'); b.classList.replace('bg-gray-500','bg-gray-400'); b.classList.add('cursor-not-allowed'); }
+  });
+  const lastTd = activeGuestRow.querySelectorAll('td')[5];
+  if (lastTd) lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
   document.getElementById('modalGuestSettle').classList.add('hidden');
-  activeGuestRow=null;
+  activeGuestRow = null;
   updateFinalizeBtn();
 });
-document.getElementById('btnCloseGuestSettle').addEventListener('click',()=>document.getElementById('modalGuestSettle').classList.add('hidden'));
+document.getElementById('btnCloseGuestSettle').addEventListener('click', () => document.getElementById('modalGuestSettle').classList.add('hidden'));
 
 function updateFinalizeBtn() {
-  const rows=[...document.querySelectorAll('#guestTableBody tr')];
-  const named=rows.filter(r=>r.querySelector('input[type="text"]')?.value.trim());
-  const allPaid=named.length>0&&named.every(r=>r.getAttribute('data-paid')==='true');
-  const btn=document.getElementById('btnFinalizeGame');
-  btn.disabled=!allPaid;
-  btn.classList.toggle('bg-blue-600',allPaid); btn.classList.toggle('hover:bg-blue-700',allPaid);
-  btn.classList.toggle('bg-gray-400',!allPaid); btn.classList.toggle('cursor-not-allowed',!allPaid);
+  const rows   = [...document.querySelectorAll('#guestTableBody tr')];
+  const named  = rows.filter(r => r.querySelector('input[type="text"]')?.value.trim());
+  const allPaid = named.length > 0 && named.every(r => r.getAttribute('data-paid') === 'true');
+  const btn = document.getElementById('btnFinalizeGame');
+  btn.disabled = !allPaid;
+  btn.classList.toggle('bg-blue-600',       allPaid);
+  btn.classList.toggle('hover:bg-blue-700', allPaid);
+  btn.classList.toggle('bg-gray-400',      !allPaid);
+  btn.classList.toggle('cursor-not-allowed',!allPaid);
+}
+
+function collectGaeste() {
+  const gaeste = [];
+  document.querySelectorAll('#guestTableBody tr').forEach(row => {
+    const nm = row.querySelector('input[type="text"]')?.value.trim();
+    if (nm) gaeste.push({
+      name: nm,
+      getraenke: row.getAttribute('data-drinks') || '{}',
+      essen:     row.getAttribute('data-food')   || '{}',
+      paid:      row.getAttribute('data-paid') === 'true',
+      tip:       row.getAttribute('data-tip') || '0.00'
+    });
+  });
+  return gaeste;
 }
 
 // ── Spiel speichern ──
-document.getElementById('btnSaveGame').addEventListener('click', async ()=>{
-  const team=document.getElementById('gTeam').value;
-  const opp=document.getElementById('gOpponent').value;
-  const date=document.getElementById('gDate').value;
-  if(!team||!opp||!date){ showToast('Bitte Team, Gegner und Datum ausfüllen.','error'); return; }
-  const gaeste=[];
-  document.querySelectorAll('#guestTableBody tr').forEach(row=>{
-    const nm=row.querySelector('input[type="text"]')?.value.trim();
-    if(nm) gaeste.push({ name:nm, getraenke:row.getAttribute('data-drinks'), essen:row.getAttribute('data-food'), paid:row.getAttribute('data-paid')==='true', tip:row.getAttribute('data-tip')||'0.00' });
-  });
-  const allPaid=gaeste.length>0&&gaeste.every(g=>g.paid);
-  const gData={team,opponent:opp,date,gaeste,status:allPaid?'ready':'draft'};
+document.getElementById('btnSaveGame').addEventListener('click', async () => {
+  const team = document.getElementById('gTeam').value;
+  const opp  = document.getElementById('gOpponent').value;
+  const date = document.getElementById('gDate').value;
+  if (!team || !opp || !date) { showToast('Bitte Team, Gegner und Datum ausfüllen.', 'error'); return; }
+  const gaeste   = collectGaeste();
+  const allPaid  = gaeste.length > 0 && gaeste.every(g => g.paid);
+  const gData    = { team, opponent:opp, date, gaeste, status: allPaid ? 'ready' : 'draft' };
   try {
-    if(editGameIdx!==null){
-      const eg=games[editGameIdx];
-      if(eg.firebaseId) await fbUpdate('spiele',eg.firebaseId,gData);
-      editGameIdx=null;
+    if (editGameId) {
+      await fbUpdate('spiele', editGameId, gData);
     } else {
-      await fbAdd('spiele',gData);
+      await fbAdd('spiele', gData);
     }
+    editGameId = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
-    showToast(`Spiel ${allPaid?'bereit':'als Entwurf'} gespeichert!`);
-    // renderGames() via onSnapshot
-  } catch(e) { console.error(e); showToast('Fehler beim Speichern des Spiels.','error'); }
+    showToast(`Spiel ${allPaid ? 'bereit' : 'als Entwurf'} gespeichert!`);
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern des Spiels.', 'error'); }
 });
 
 // ── Spiel finalisieren (PDF) ──
-document.getElementById('btnFinalizeGame').addEventListener('click', async ()=>{
-  const team=document.getElementById('gTeam').value;
-  const opp=document.getElementById('gOpponent').value;
-  const date=document.getElementById('gDate').value;
-  if(!team||!opp||!date){ showToast('Bitte alle Felder ausfüllen.','error'); return; }
-  const gaeste=[];
-  document.querySelectorAll('#guestTableBody tr').forEach(row=>{
-    const nm=row.querySelector('input[type="text"]')?.value.trim();
-    if(nm) gaeste.push({ name:nm, getraenke:row.getAttribute('data-drinks'), essen:row.getAttribute('data-food'), paid:true, tip:row.getAttribute('data-tip')||'0.00' });
-  });
-  const gData={team,opponent:opp,date,gaeste,status:'finalized',finalizedAt:new Date().toISOString()};
-  const { jsPDF }=window.jspdf; const pdoc=new jsPDF();
-  const tData=[]; const dSum={},fSum={}; let totAmt=0,totTip=0;
-  gaeste.forEach(g=>{
-    const dr=JSON.parse(g.getraenke||'{}'); const fo=JSON.parse(g.essen||'{}');
-    let ga=0;
-    for(const[n,q]of Object.entries(dr)){ const a=guestDrinkList.find(x=>x.name===n); if(a){ ga+=a.preis*q; dSum[n]=(dSum[n]||0)+q; } }
-    for(const[n,q]of Object.entries(fo)){ const a=guestFoodList.find(x=>x.name===n);  if(a){ ga+=a.preis*q; fSum[n]=(fSum[n]||0)+q; } }
-    const tip=parseFloat(g.tip||0); totAmt+=ga; totTip+=tip;
+document.getElementById('btnFinalizeGame').addEventListener('click', async () => {
+  const team = document.getElementById('gTeam').value;
+  const opp  = document.getElementById('gOpponent').value;
+  const date = document.getElementById('gDate').value;
+  if (!team || !opp || !date) { showToast('Bitte alle Felder ausfüllen.', 'error'); return; }
+  const gaeste = collectGaeste();
+  const gData  = { team, opponent:opp, date, gaeste, status:'finalized', finalizedAt: new Date().toISOString() };
+
+  const { jsPDF } = window.jspdf;
+  const pdoc = new jsPDF();
+  const tData = []; const dSum = {}, fSum = {}; let totAmt = 0, totTip = 0;
+  gaeste.forEach(g => {
+    const dr = JSON.parse(g.getraenke||'{}'); const fo = JSON.parse(g.essen||'{}');
+    let ga = 0;
+    for (const [n,q] of Object.entries(dr)) { const a=guestDrinkList.find(x=>x.name===n); if(a){ga+=a.preis*q; dSum[n]=(dSum[n]||0)+q;} }
+    for (const [n,q] of Object.entries(fo)) { const a=guestFoodList.find(x=>x.name===n);  if(a){ga+=a.preis*q; fSum[n]=(fSum[n]||0)+q;} }
+    const tip = parseFloat(g.tip||0); totAmt += ga; totTip += tip;
     tData.push([g.name,
       Object.entries(dr).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
       Object.entries(fo).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
       ga.toFixed(2)+' €', tip.toFixed(2)+' €']);
   });
-  tData.push(['SUMME',Object.entries(dSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
+  tData.push(['SUMME',
+    Object.entries(dSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
     Object.entries(fSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
-    totAmt.toFixed(2)+' €',totTip.toFixed(2)+' €']);
-  pdoc.setFontSize(16); pdoc.text(`Abrechnung: ${team} vs ${opp}`,10,15);
-  pdoc.setFontSize(12); pdoc.text(`Datum: ${fDate(date)}`,10,25);
+    totAmt.toFixed(2)+' €', totTip.toFixed(2)+' €']);
+  pdoc.setFontSize(16); pdoc.text(`Abrechnung: ${team} vs ${opp}`, 10, 15);
+  pdoc.setFontSize(12); pdoc.text(`Datum: ${fDate(date)}`, 10, 25);
   pdoc.autoTable({ head:[['Name','Getränke','Essen','Zwischensumme','Trinkgeld']], body:tData,
     styles:{fontSize:9,cellPadding:2}, headStyles:{fillColor:[70,130,180],textColor:255}, startY:35,
     alternateRowStyles:{fillColor:[245,245,245]},
     didParseCell(d){ if(d.row.index===tData.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[220,220,220]; } }
   });
-  pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`,10,pdoc.lastAutoTable.finalY+10);
-  const pdfData=pdoc.output('datauristring');
-  gData.pdfData=pdfData; gData.pdfCreatedAt=new Date().toISOString();
+  pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`, 10, pdoc.lastAutoTable.finalY+10);
+  const pdfData = pdoc.output('datauristring');
+  gData.pdfData = pdfData; gData.pdfCreatedAt = new Date().toISOString();
+
   try {
-    if(editGameIdx!==null){
-      const eg=games[editGameIdx];
-      if(eg.firebaseId) await fbUpdate('spiele',eg.firebaseId,gData);
-      editGameIdx=null;
+    if (editGameId) {
+      await fbUpdate('spiele', editGameId, gData);
     } else {
-      await fbAdd('spiele',gData);
+      await fbAdd('spiele', gData);
     }
+    editGameId = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
     openPdfDataUri(pdfData);
     showToast('Spiel final abgerechnet!');
-  } catch(e) { console.error(e); showToast('Fehler beim Finalisieren.','error'); }
+  } catch(e) { console.error(e); showToast('Fehler beim Finalisieren.', 'error'); }
 });
 
 // ── Spiel bearbeiten / löschen ──
 function editGame(gameId) {
-  const g = games.find(x => x.id === gameId || x.firebaseId === gameId);
-  if(!g){ showToast('Spiel nicht gefunden.','error'); return; }
-  if(g.status==='finalized'){ showToast('Finalisierte Spiele können nicht bearbeitet werden.','warning'); return; }
-  editGameIdx = games.indexOf(g);
+  const g = games.find(x => x.id === gameId);
+  if (!g) { showToast('Spiel nicht gefunden.', 'error'); return; }
+  if (g.status === 'finalized') { showToast('Finalisierte Spiele können nicht bearbeitet werden.', 'warning'); return; }
+  editGameId = gameId;
   clearGameForm();
-  document.getElementById('gTeam').value=g.team||'';
-  document.getElementById('gOpponent').value=g.opponent||'';
-  document.getElementById('gDate').value=g.date||'';
-  const tbody=document.getElementById('guestTableBody');
-  if(g.gaeste&&g.gaeste.length){ g.gaeste.forEach(gst=>{ addGuestRow(); const row=tbody.lastChild;
-    row.querySelector('input[type="text"]').value=gst.name||'';
-    row.setAttribute('data-drinks',gst.getraenke||''); row.setAttribute('data-food',gst.essen||''); row.setAttribute('data-tip',gst.tip||'0.00');
-    updateGuestRowTotal(row);
-    if(gst.paid){ row.setAttribute('data-paid','true'); row.classList.add('bg-green-100');
-      row.querySelector('input[type="text"]').disabled=true; row.querySelector('input[type="text"]').classList.add('bg-gray-200');
-      ['btnGDrinks','btnGFood','btnGSettle'].forEach(cls=>{ const b=row.querySelector('.'+cls); if(b){b.disabled=true;b.classList.add('bg-gray-400','cursor-not-allowed');} });
-      const ltd=row.querySelectorAll('td')[5]; if(ltd) ltd.innerHTML='<span class="text-green-600 text-xl">✓</span>';
-    }
-  }); } else { initGuestRows(); }
+  document.getElementById('gTeam').value     = g.team     || '';
+  document.getElementById('gOpponent').value = g.opponent || '';
+  document.getElementById('gDate').value     = g.date     || '';
+  const tbody = document.getElementById('guestTableBody');
+  if (g.gaeste && g.gaeste.length) {
+    g.gaeste.forEach(gst => {
+      addGuestRow();
+      const row = tbody.lastChild;
+      row.querySelector('input[type="text"]').value = gst.name || '';
+      row.setAttribute('data-drinks', gst.getraenke || '{}');
+      row.setAttribute('data-food',   gst.essen     || '{}');
+      row.setAttribute('data-tip',    gst.tip       || '0.00');
+      updateGuestRowTotal(row);
+      if (gst.paid) {
+        row.setAttribute('data-paid', 'true');
+        row.classList.add('bg-green-100');
+        row.querySelector('input[type="text"]').disabled = true;
+        row.querySelector('input[type="text"]').classList.add('bg-gray-200');
+        ['btnGDrinks','btnGFood','btnGSettle'].forEach(cls => {
+          const b = row.querySelector('.'+cls); if (b) { b.disabled=true; b.classList.add('bg-gray-400','cursor-not-allowed'); }
+        });
+        const ltd = row.querySelectorAll('td')[5]; if (ltd) ltd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
+      }
+    });
+  } else { initGuestRows(); }
   document.getElementById('modalGame').classList.remove('hidden');
   updateFinalizeBtn();
 }
-window.editGame=editGame;
+window.editGame = editGame;
 
 function deleteGame(gameId) {
-  const g = games.find(x => x.id === gameId || x.firebaseId === gameId);
-  if(!g){ showToast('Spiel nicht gefunden.','error'); return; }
-  if(g.status==='finalized'){ showToast('Finalisierte Spiele können nicht gelöscht werden.','warning'); return; }
-  showConfirm('Spiel wirklich löschen?', async ()=>{
+  const g = games.find(x => x.id === gameId);
+  if (!g) { showToast('Spiel nicht gefunden.', 'error'); return; }
+  if (g.status === 'finalized') { showToast('Finalisierte Spiele können nicht gelöscht werden.', 'warning'); return; }
+  showConfirm('Spiel wirklich löschen?', async () => {
     try {
-      if(g.firebaseId || g.id) await fbDelete('spiele', g.firebaseId || g.id);
+      await fbDelete('spiele', gameId);
       showToast('Spiel gelöscht.');
-      // renderGames() via onSnapshot
-    } catch(e) { console.error(e); showToast('Fehler beim Löschen.','error'); }
+    } catch(e) { console.error(e); showToast('Fehler beim Löschen.', 'error'); }
   });
 }
-window.deleteGame=deleteGame;
+window.deleteGame = deleteGame;
 
 // ══════════════════════════════════════════════════════════════
 // AUSWERTUNGEN
-// Baut Report-Daten aus dem Cache (buchungenCache, games, abrechnungen)
 // ══════════════════════════════════════════════════════════════
 function buildReportDataAndRender() {
   const buchungen = Object.values(buchungenCache);
-
   const memberWeeks = {};
   buchungen.forEach(b => {
-    if(!b.date||!b.items?.length) return;
-    const d=new Date(b.date); const {week:wk, isoYear:yr} = getISOWeek(d);
-    const key=`KW ${String(wk).padStart(2,'0')}/${yr}`;
-    if(!memberWeeks[key]) memberWeeks[key]={ week:wk,year:yr,sortDate:new Date(b.date),buchungen:0,articles:{},getraenkeVK:0,essenVK:0,gesamtVK:0,gesamtEK:0 };
-    const w=memberWeeks[key]; w.buchungen++;
-    b.items.forEach(item=>{
+    if (!b.date || !b.items?.length) return;
+    const d = new Date(b.date); const { week:wk, isoYear:yr } = getISOWeek(d);
+    const key = `KW ${String(wk).padStart(2,'0')}/${yr}`;
+    if (!memberWeeks[key]) memberWeeks[key] = { week:wk, year:yr, sortDate:new Date(b.date), buchungen:0, articles:{}, getraenkeVK:0, essenVK:0, gesamtVK:0, gesamtEK:0 };
+    const w = memberWeeks[key]; w.buchungen++;
+    b.items.forEach(item => {
       const vk=item.sellPrice*item.qty, ek=item.buyPrice*item.qty;
       w.gesamtVK+=vk; w.gesamtEK+=ek;
-      if(item.type==='drink') w.getraenkeVK+=vk; else w.essenVK+=vk;
-      if(!w.articles[item.name]) w.articles[item.name]={qty:0,vk:0,ek:0,type:item.type};
+      if (item.type==='drink') w.getraenkeVK+=vk; else w.essenVK+=vk;
+      if (!w.articles[item.name]) w.articles[item.name] = { qty:0, vk:0, ek:0, type:item.type };
       w.articles[item.name].qty+=item.qty; w.articles[item.name].vk+=vk; w.articles[item.name].ek+=ek;
     });
   });
 
   const gameWeeks = {};
   games.forEach(g => {
-    if(!g.date||!g.gaeste?.length) return;
-    const d=new Date(g.date); const {week:wk, isoYear:yr} = getISOWeek(d);
-    const key=`KW ${String(wk).padStart(2,'0')}/${yr}`;
-    if(!gameWeeks[key]) gameWeeks[key]={ week:wk,year:yr,sortDate:new Date(g.date),spiele:[],drinksDetail:{},foodDetail:{},getraenkeVK:0,essenVK:0,gesamtVK:0,gesamtEK:0,trinkgeld:0 };
-    const w=gameWeeks[key];
-    w.spiele.push({team:g.team,opponent:g.opponent,date:g.date});
-    g.gaeste.forEach(gst=>{
+    if (!g.date || !g.gaeste?.length) return;
+    const d = new Date(g.date); const { week:wk, isoYear:yr } = getISOWeek(d);
+    const key = `KW ${String(wk).padStart(2,'0')}/${yr}`;
+    if (!gameWeeks[key]) gameWeeks[key] = { week:wk, year:yr, sortDate:new Date(g.date), spiele:[], drinksDetail:{}, foodDetail:{}, getraenkeVK:0, essenVK:0, gesamtVK:0, gesamtEK:0, trinkgeld:0 };
+    const w = gameWeeks[key];
+    w.spiele.push({ team:g.team, opponent:g.opponent, date:g.date });
+    g.gaeste.forEach(gst => {
       const dr=JSON.parse(gst.getraenke||'{}'); const fo=JSON.parse(gst.essen||'{}');
-      for(const[n,q]of Object.entries(dr)){ const art=ARTICLES.find(a=>a.name===n);
-        if(art){ w.getraenkeVK+=art.guestPrice*q; w.gesamtVK+=art.guestPrice*q; w.gesamtEK+=art.buyPrice*q;
-          if(!w.drinksDetail[n]) w.drinksDetail[n]={qty:0,vk:0,ek:0}; w.drinksDetail[n].qty+=q; w.drinksDetail[n].vk+=art.guestPrice*q; w.drinksDetail[n].ek+=art.buyPrice*q; } }
-      for(const[n,q]of Object.entries(fo)){ const art=ARTICLES.find(a=>a.name===n);
-        if(art){ w.essenVK+=art.guestPrice*q; w.gesamtVK+=art.guestPrice*q; w.gesamtEK+=art.buyPrice*q;
-          if(!w.foodDetail[n]) w.foodDetail[n]={qty:0,vk:0,ek:0}; w.foodDetail[n].qty+=q; w.foodDetail[n].vk+=art.guestPrice*q; w.foodDetail[n].ek+=art.buyPrice*q; } }
-      w.trinkgeld+=parseFloat(gst.tip||0);
+      for (const [n,q] of Object.entries(dr)) { const art=ARTICLES.find(a=>a.name===n); if(art){ w.getraenkeVK+=art.guestPrice*q; w.gesamtVK+=art.guestPrice*q; w.gesamtEK+=art.buyPrice*q; if(!w.drinksDetail[n]) w.drinksDetail[n]={qty:0,vk:0,ek:0}; w.drinksDetail[n].qty+=q; w.drinksDetail[n].vk+=art.guestPrice*q; w.drinksDetail[n].ek+=art.buyPrice*q; } }
+      for (const [n,q] of Object.entries(fo)) { const art=ARTICLES.find(a=>a.name===n); if(art){ w.essenVK+=art.guestPrice*q; w.gesamtVK+=art.guestPrice*q; w.gesamtEK+=art.buyPrice*q; if(!w.foodDetail[n]) w.foodDetail[n]={qty:0,vk:0,ek:0}; w.foodDetail[n].qty+=q; w.foodDetail[n].vk+=art.guestPrice*q; w.foodDetail[n].ek+=art.buyPrice*q; } }
+      w.trinkgeld += parseFloat(gst.tip||0);
     });
   });
 
   reportData = { member: memberWeeks, game: gameWeeks };
 
-  // Jahres-Filter aktualisieren
-  const years = new Set([
-    ...Object.values(memberWeeks).map(w=>w.year),
-    ...Object.values(gameWeeks).map(w=>w.year)
-  ]);
-  const sel=document.getElementById('filterYear'); const cur=sel.value;
-  sel.innerHTML='<option value="">Alle Jahre</option>';
-  [...years].sort((a,b)=>b-a).forEach(y=>{
-    const o=document.createElement('option'); o.value=y; o.textContent=y;
-    if(String(y)===cur) o.selected=true; sel.appendChild(o);
+  const years = new Set([...Object.values(memberWeeks).map(w=>w.year), ...Object.values(gameWeeks).map(w=>w.year)]);
+  const sel = document.getElementById('filterYear'); const cur = sel.value;
+  sel.innerHTML = '<option value="">Alle Jahre</option>';
+  [...years].sort((a,b) => b-a).forEach(y => {
+    const o = document.createElement('option'); o.value=y; o.textContent=y;
+    if (String(y)===cur) o.selected=true; sel.appendChild(o);
   });
 
   renderMemberReport(memberWeeks);
   renderGameReport(gameWeeks);
 }
 
-// loadReports() delegiert jetzt an buildReportDataAndRender
-function loadReports() {
-  buildReportDataAndRender();
-}
-
 function switchReportTab(tab) {
   currentReportTab = tab;
-  ['members','games'].forEach(t=>{
-    document.getElementById(`rtab-${t}`).classList.toggle('active',t===tab);
-    document.getElementById(`report-${t}-wrap`).classList.toggle('hidden',t!==tab);
+  ['members','games'].forEach(t => {
+    document.getElementById(`rtab-${t}`).classList.toggle('active', t===tab);
+    document.getElementById(`report-${t}-wrap`).classList.toggle('hidden', t!==tab);
   });
 }
-window.switchReportTab=switchReportTab;
+window.switchReportTab = switchReportTab;
 
-document.getElementById('filterYear').addEventListener('change', ()=>{
+document.getElementById('filterYear').addEventListener('change', () => {
   renderMemberReport(reportData.member||{});
   renderGameReport(reportData.game||{});
 });
 
 function renderMemberReport(data) {
-  const yr=document.getElementById('filterYear').value;
-  const filt=yr?Object.fromEntries(Object.entries(data).filter(([,v])=>String(v.year)===yr)):data;
-  const tbody=document.getElementById('bodyMemberReport');
-  const noData=document.getElementById('memberNoData');
-  tbody.innerHTML='';
-  if(!Object.keys(filt).length){ noData.classList.remove('hidden'); return; }
+  const yr    = document.getElementById('filterYear').value;
+  const filt  = yr ? Object.fromEntries(Object.entries(data).filter(([,v])=>String(v.year)===yr)) : data;
+  const tbody = document.getElementById('bodyMemberReport');
+  const noData= document.getElementById('memberNoData');
+  tbody.innerHTML = '';
+  if (!Object.keys(filt).length) { noData.classList.remove('hidden'); return; }
   noData.classList.add('hidden');
-  const sorted=Object.entries(filt).sort(([,a],[,b])=>b.sortDate-a.sortDate);
+  const sorted = Object.entries(filt).sort(([,a],[,b]) => b.sortDate - a.sortDate);
   let tb=0,tg=0,te=0,tvk=0,tek=0;
-  sorted.forEach(([key,d])=>{
+  sorted.forEach(([key,d]) => {
     tb+=d.buchungen; tg+=d.getraenkeVK; te+=d.essenVK; tvk+=d.gesamtVK; tek+=d.gesamtEK;
-    const abr=abrechnungen[key];
-    const row=document.createElement('tr'); row.className='hover:bg-gray-50';
+    const abr = abrechnungen[key];
+    const row = document.createElement('tr'); row.className='hover:bg-gray-50';
     row.innerHTML=`
       <td class="p-3 border text-center font-medium">${key}</td>
       <td class="p-3 border text-center">${d.buchungen}</td>
@@ -1796,37 +1796,35 @@ function renderMemberReport(data) {
       <td class="p-3 border text-right text-gray-500">${fEuro(d.gesamtEK)}</td>
       <td class="p-3 border text-right text-green-700 font-semibold">${fEuro(d.gesamtVK-d.gesamtEK)}</td>
       <td class="p-3 border text-center">
-        ${abr?.pdfData?`<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>`
-          :'<span class="text-gray-300 text-xs">–</span>'}
+        ${abr?.pdfData ? `<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>` : '<span class="text-gray-300 text-xs">–</span>'}
       </td>
       <td class="p-3 border text-center">
         <button onclick="showMemberWeekDetails('${key}')" class="text-blue-600 hover:underline text-sm">Details</button>
       </td>`;
     tbody.appendChild(row);
   });
-  document.getElementById('mTotBuch').textContent=tb;
-  document.getElementById('mTotGtr').textContent=fEuro(tg);
-  document.getElementById('mTotEss').textContent=fEuro(te);
-  document.getElementById('mTotVK').textContent=fEuro(tvk);
-  document.getElementById('mTotEK').textContent=fEuro(tek);
-  document.getElementById('mTotRoh').textContent=fEuro(tvk-tek);
+  document.getElementById('mTotBuch').textContent = tb;
+  document.getElementById('mTotGtr').textContent  = fEuro(tg);
+  document.getElementById('mTotEss').textContent  = fEuro(te);
+  document.getElementById('mTotVK').textContent   = fEuro(tvk);
+  document.getElementById('mTotEK').textContent   = fEuro(tek);
+  document.getElementById('mTotRoh').textContent  = fEuro(tvk-tek);
 }
 
 function renderGameReport(data) {
-  const yr=document.getElementById('filterYear').value;
-  const filt=yr?Object.fromEntries(Object.entries(data).filter(([,v])=>String(v.year)===yr)):data;
-  const tbody=document.getElementById('bodyGameReport');
-  const noData=document.getElementById('gameNoData');
-  tbody.innerHTML='';
-  if(!Object.keys(filt).length){ noData.classList.remove('hidden'); return; }
+  const yr    = document.getElementById('filterYear').value;
+  const filt  = yr ? Object.fromEntries(Object.entries(data).filter(([,v])=>String(v.year)===yr)) : data;
+  const tbody = document.getElementById('bodyGameReport');
+  const noData= document.getElementById('gameNoData');
+  tbody.innerHTML = '';
+  if (!Object.keys(filt).length) { noData.classList.remove('hidden'); return; }
   noData.classList.add('hidden');
-  const sorted=Object.entries(filt).sort(([,a],[,b])=>b.sortDate-a.sortDate);
+  const sorted = Object.entries(filt).sort(([,a],[,b]) => b.sortDate - a.sortDate);
   let tsp=0,tg=0,te=0,tt=0,ts=0;
-  sorted.forEach(([key,d])=>{
-    tsp+=d.spiele.length; tg+=d.getraenkeVK; te+=d.essenVK; tt+=d.trinkgeld;
-    ts+=d.gesamtVK+d.trinkgeld;
-    const abr=abrechnungen[key];
-    const row=document.createElement('tr'); row.className='hover:bg-gray-50';
+  sorted.forEach(([key,d]) => {
+    tsp+=d.spiele.length; tg+=d.getraenkeVK; te+=d.essenVK; tt+=d.trinkgeld; ts+=d.gesamtVK+d.trinkgeld;
+    const abr = abrechnungen[key];
+    const row = document.createElement('tr'); row.className='hover:bg-gray-50';
     row.innerHTML=`
       <td class="p-3 border text-center font-medium">${key}</td>
       <td class="p-3 border text-center">${d.spiele.length}</td>
@@ -1835,80 +1833,71 @@ function renderGameReport(data) {
       <td class="p-3 border text-right">${fEuro(d.trinkgeld)}</td>
       <td class="p-3 border text-right font-semibold">${fEuro(d.gesamtVK+d.trinkgeld)}</td>
       <td class="p-3 border text-center">
-        ${abr?.pdfData?`<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>`
-          :'<span class="text-gray-300 text-xs">–</span>'}
+        ${abr?.pdfData ? `<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>` : '<span class="text-gray-300 text-xs">–</span>'}
       </td>
       <td class="p-3 border text-center">
         <button onclick="showGameWeekDetails('${key}')" class="text-blue-600 hover:underline text-sm">Details</button>
       </td>`;
     tbody.appendChild(row);
   });
-  document.getElementById('gTotSpiele').textContent=tsp;
-  document.getElementById('gTotGtr').textContent=fEuro(tg);
-  document.getElementById('gTotEss').textContent=fEuro(te);
-  document.getElementById('gTotTip').textContent=fEuro(tt);
-  document.getElementById('gTotSum').textContent=fEuro(ts);
+  document.getElementById('gTotSpiele').textContent = tsp;
+  document.getElementById('gTotGtr').textContent    = fEuro(tg);
+  document.getElementById('gTotEss').textContent    = fEuro(te);
+  document.getElementById('gTotTip').textContent    = fEuro(tt);
+  document.getElementById('gTotSum').textContent    = fEuro(ts);
 }
 
 function showAbrechnungPDF(weekKey) {
-  const abr=abrechnungen[weekKey];
-  if(!abr?.pdfData){ showToast('Kein PDF vorhanden.','warning'); return; }
+  const abr = abrechnungen[weekKey];
+  if (!abr?.pdfData) { showToast('Kein PDF vorhanden.', 'warning'); return; }
   openPdfDataUri(abr.pdfData);
 }
-window.showAbrechnungPDF=showAbrechnungPDF;
+window.showAbrechnungPDF = showAbrechnungPDF;
 
 function showMemberWeekDetails(key) {
-  const d=reportData.member[key]; if(!d) return;
-  document.getElementById('wkDetailTitle').textContent=key;
-  const drinks=Object.entries(d.articles).filter(([,v])=>v.type==='drink');
-  const food=Object.entries(d.articles).filter(([,v])=>v.type==='food');
-  let html='';
-  if(drinks.length){ html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>';
-    drinks.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; });
-    html+='</tbody></table></div>'; }
-  if(food.length){ html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>';
-    food.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; });
-    html+='</tbody></table></div>'; }
-  if(!html) html='<p class="text-gray-400">Keine Artikel.</p>';
-  document.getElementById('wkDetailContent').innerHTML=html;
+  const d = reportData.member[key]; if (!d) return;
+  document.getElementById('wkDetailTitle').textContent = key;
+  const drinks = Object.entries(d.articles).filter(([,v])=>v.type==='drink');
+  const food   = Object.entries(d.articles).filter(([,v])=>v.type==='food');
+  let html = '';
+  if (drinks.length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>'; drinks.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  if (food.length)   { html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>'; food.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  if (!html) html = '<p class="text-gray-400">Keine Artikel.</p>';
+  document.getElementById('wkDetailContent').innerHTML = html;
   document.getElementById('modalWeekDetails').classList.remove('hidden');
 }
-window.showMemberWeekDetails=showMemberWeekDetails;
+window.showMemberWeekDetails = showMemberWeekDetails;
 
 function showGameWeekDetails(key) {
-  const d=reportData.game[key]; if(!d) return;
-  document.getElementById('wkDetailTitle').textContent=key;
-  let html=`<h3 class="font-semibold mb-2">Spiele:</h3><div class="bg-gray-50 rounded p-3 mb-3">`;
-  d.spiele.forEach(s=>{ html+=`<div class="mb-1"><strong>${esc(s.team)}</strong> vs <strong>${esc(s.opponent)}</strong> <span class="text-gray-400 text-sm">(${fDate(s.date)})</span></div>`; });
-  html+='</div>';
-  if(Object.keys(d.drinksDetail).length){ html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>';
-    Object.entries(d.drinksDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; });
-    html+='</tbody></table></div>'; }
-  if(Object.keys(d.foodDetail).length){ html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>';
-    Object.entries(d.foodDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; });
-    html+='</tbody></table></div>'; }
-  document.getElementById('wkDetailContent').innerHTML=html;
+  const d = reportData.game[key]; if (!d) return;
+  document.getElementById('wkDetailTitle').textContent = key;
+  let html = `<h3 class="font-semibold mb-2">Spiele:</h3><div class="bg-gray-50 rounded p-3 mb-3">`;
+  d.spiele.forEach(s => { html += `<div class="mb-1"><strong>${esc(s.team)}</strong> vs <strong>${esc(s.opponent)}</strong> <span class="text-gray-400 text-sm">(${fDate(s.date)})</span></div>`; });
+  html += '</div>';
+  if (Object.keys(d.drinksDetail).length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.drinksDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  if (Object.keys(d.foodDetail).length)   { html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.foodDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  document.getElementById('wkDetailContent').innerHTML = html;
   document.getElementById('modalWeekDetails').classList.remove('hidden');
 }
-window.showGameWeekDetails=showGameWeekDetails;
-document.getElementById('btnCloseWeekDetail').addEventListener('click',()=>document.getElementById('modalWeekDetails').classList.add('hidden'));
+window.showGameWeekDetails = showGameWeekDetails;
+document.getElementById('btnCloseWeekDetail').addEventListener('click', () => document.getElementById('modalWeekDetails').classList.add('hidden'));
 
 // ── PDF Export (Auswertung) ──
-document.getElementById('btnExportReport').addEventListener('click',()=>{
-  const { jsPDF }=window.jspdf; const doc=new jsPDF();
-  const yr=document.getElementById('filterYear').value;
-  const title=currentReportTab==='members'?`Mitglieder-Auswertung${yr?' '+yr:''}`:`Heimspiele-Auswertung${yr?' '+yr:''}`;
-  doc.setFontSize(16); doc.text(title,10,15);
-  doc.setFontSize(10); doc.text(`Erstellt: ${new Date().toLocaleDateString('de-DE')}`,10,23);
-  const tbodyId=currentReportTab==='members'?'bodyMemberReport':'bodyGameReport';
-  const tableData=[];
-  document.querySelectorAll(`#${tbodyId} tr`).forEach(row=>{
-    const cells=[...row.querySelectorAll('td')].slice(0,-2);
-    tableData.push(cells.map(c=>c.textContent.trim()));
+document.getElementById('btnExportReport').addEventListener('click', () => {
+  const { jsPDF } = window.jspdf; const doc = new jsPDF();
+  const yr    = document.getElementById('filterYear').value;
+  const title = currentReportTab==='members' ? `Mitglieder-Auswertung${yr?' '+yr:''}` : `Heimspiele-Auswertung${yr?' '+yr:''}`;
+  doc.setFontSize(16); doc.text(title, 10, 15);
+  doc.setFontSize(10); doc.text(`Erstellt: ${new Date().toLocaleDateString('de-DE')}`, 10, 23);
+  const tbodyId = currentReportTab==='members' ? 'bodyMemberReport' : 'bodyGameReport';
+  const tableData = [];
+  document.querySelectorAll(`#${tbodyId} tr`).forEach(row => {
+    const cells = [...row.querySelectorAll('td')].slice(0,-2);
+    tableData.push(cells.map(c => c.textContent.trim()));
   });
-  const heads=currentReportTab==='members'
-    ?[['KW','Buchungen','Getränke VK','Essen VK','Gesamtumsatz','Einkauf','Rohertrag']]
-    :[['KW','Spiele','Getränke','Essen','Trinkgeld','Summe']];
+  const heads = currentReportTab==='members'
+    ? [['KW','Buchungen','Getränke VK','Essen VK','Gesamtumsatz','Einkauf','Rohertrag']]
+    : [['KW','Spiele','Getränke','Essen','Trinkgeld','Summe']];
   doc.autoTable({ head:heads, body:tableData, startY:30,
     styles:{fontSize:8,cellPadding:2}, headStyles:{fillColor:[70,130,180],textColor:255},
     alternateRowStyles:{fillColor:[245,245,245]} });
@@ -1916,220 +1905,184 @@ document.getElementById('btnExportReport').addEventListener('click',()=>{
 });
 
 // ══════════════════════════════════════════════════════════════
+// GOBD CSV EXPORT
+// GoBD-Grundsatz der Einzelaufzeichnungspflicht (§ 239 HGB):
+// Eine Zeile pro Buchungsposition, gemeinsame Buchungs-ID als Referenz.
+// ══════════════════════════════════════════════════════════════
+document.getElementById('btnExportGoBD').addEventListener('click', () => {
+  const yr         = document.getElementById('filterYear').value;
+  const yearLabel  = yr || 'alle-jahre';
+  const rows       = Object.values(buchungenCache)
+    .filter(b => { if (!b.date||!b.items?.length) return false; return !yr || b.date.startsWith(yr); })
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  if (!rows.length) { showToast('Keine Buchungen für den gewählten Zeitraum.', 'warning'); return; }
+
+  const BOM    = '\uFEFF';
+  const header = ['Buchungs-ID','Datum','Mitglied','Artikel','Menge','Einzelpreis (EUR)','Zeilenbetrag (EUR)','Status','Abgerechnet am'].join(';');
+  const lines  = [header];
+
+  rows.forEach(b => {
+    const member     = members.find(m => m.id === b.memberId);
+    const memberName = member ? memberDisplayName(member) : b.memberId;
+    const status     = b.settled ? 'bezahlt' : 'offen';
+    const settledAt  = b.settled && b.settledAt ? fDate(b.settledAt) : '';
+    b.items.forEach(item => {
+      lines.push([
+        b.id,
+        fDate(b.date),
+        `"${memberName.replace(/"/g,'""')}"`,
+        `"${item.name.replace(/"/g,'""')}"`,
+        item.qty,
+        item.sellPrice.toFixed(2).replace('.',','),
+        (item.sellPrice * item.qty).toFixed(2).replace('.',','),
+        status,
+        settledAt
+      ].join(';'));
+    });
+  });
+
+  const blob = new Blob([BOM + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `buchungen-gobd-${yearLabel}-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  showToast(`CSV exportiert: ${rows.length} Buchungen, ${lines.length-1} Positionen.`);
+});
+
+// ══════════════════════════════════════════════════════════════
 // ABRECHNUNG ERSTELLEN
 // ══════════════════════════════════════════════════════════════
-document.getElementById('btnCreateAbrechnung').addEventListener('click', ()=>{
-  const allKeys = new Set([
-    ...Object.keys(reportData.member||{}),
-    ...Object.keys(reportData.game||{})
-  ]);
+document.getElementById('btnCreateAbrechnung').addEventListener('click', () => {
+  const allKeys = new Set([...Object.keys(reportData.member||{}), ...Object.keys(reportData.game||{})]);
+  if (!allKeys.size) { showToast('Keine Daten für eine Abrechnung vorhanden.', 'warning'); return; }
   const sel = document.getElementById('abrechnungKWSelect');
   sel.innerHTML = '<option value="">– bitte wählen –</option>';
   const startSortKey = ABRECHNUNG_START.year * 100 + ABRECHNUNG_START.week;
-  [...allKeys].sort().reverse().forEach(key=>{
+  [...allKeys].sort().reverse().forEach(key => {
     const m = key.match(/KW\s+(\d+)\/(\d+)/);
-    if(m) {
-      const keySortKey = parseInt(m[2]) * 100 + parseInt(m[1]);
-      if(keySortKey < startSortKey) return;
-    }
-    const opt=document.createElement('option');
-    opt.value=key; opt.textContent=key+(abrechnungen[key]?' ✓ (bereits abgerechnet)':'');
-    if(abrechnungen[key]) opt.disabled=true;
+    if (m && (parseInt(m[2])*100 + parseInt(m[1])) < startSortKey) return;
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = key + (abrechnungen[key] ? ' ✓ (bereits abgerechnet)' : '');
+    if (abrechnungen[key]) opt.disabled = true;
     sel.appendChild(opt);
   });
   document.getElementById('abrechnungHint').classList.add('hidden');
-  if(!allKeys.size) { showToast('Keine Daten für eine Abrechnung vorhanden.','warning'); return; }
-
   const unprocessed = [...allKeys].sort().reverse().find(k => !abrechnungen[k]);
-  if(unprocessed) { sel.value = unprocessed; sel.dispatchEvent(new Event('change')); }
-
+  if (unprocessed) { sel.value = unprocessed; sel.dispatchEvent(new Event('change')); }
   document.getElementById('modalCreateAbrechnung').classList.remove('hidden');
 });
-document.getElementById('btnCancelAbrechnung').addEventListener('click',()=>document.getElementById('modalCreateAbrechnung').classList.add('hidden'));
+document.getElementById('btnCancelAbrechnung').addEventListener('click', () => document.getElementById('modalCreateAbrechnung').classList.add('hidden'));
 
-document.getElementById('abrechnungKWSelect').addEventListener('change', ()=>{
-  const key = document.getElementById('abrechnungKWSelect').value;
+document.getElementById('abrechnungKWSelect').addEventListener('change', () => {
+  const key  = document.getElementById('abrechnungKWSelect').value;
   const hint = document.getElementById('abrechnungKontoHint');
-  if(!key){ hint.classList.add('hidden'); return; }
-
-  function kwSortKey(k) {
-    const m = k.match(/KW\s+(\d+)\/(\d+)/);
-    if(!m) return 0;
-    return parseInt(m[2]) * 100 + parseInt(m[1]);
-  }
-
-  const selectedSort = kwSortKey(key);
-  const priorSettled = Object.values(abrechnungen)
+  if (!key) { hint.classList.add('hidden'); return; }
+  const kwSortKey = k => { const m=k.match(/KW\s+(\d+)\/(\d+)/); return m ? parseInt(m[2])*100+parseInt(m[1]) : 0; };
+  const selectedSort   = kwSortKey(key);
+  const priorSettled   = Object.values(abrechnungen)
     .filter(a => a.weekKey && kwSortKey(a.weekKey) < selectedSort && a.kontoNeu !== undefined)
     .sort((a,b) => kwSortKey(b.weekKey) - kwSortKey(a.weekKey));
-
-  if(priorSettled.length > 0) {
+  if (priorSettled.length > 0) {
     const prev = priorSettled[0];
-    const prefill = prev.kontoNeu;
-    document.getElementById('abrechnungKontoVor').value = prefill.toFixed(2);
-    hint.textContent = `Aus ${prev.weekKey}: Kontostand ${prefill.toFixed(2)} €`;
-    hint.classList.remove('hidden');
+    document.getElementById('abrechnungKontoVor').value = prev.kontoNeu.toFixed(2);
+    hint.textContent = `Aus ${prev.weekKey}: Kontostand ${prev.kontoNeu.toFixed(2)} €`;
   } else {
     document.getElementById('abrechnungKontoVor').value = '0.00';
     hint.textContent = 'Keine Vorwoche gefunden – bitte Startwert eingeben.';
-    hint.classList.remove('hidden');
   }
+  hint.classList.remove('hidden');
 });
 
-document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
+document.getElementById('btnDoAbrechnung').addEventListener('click', async () => {
   const weekKey = document.getElementById('abrechnungKWSelect').value;
-  if(!weekKey){ showToast('Bitte eine Kalenderwoche wählen.','error'); return; }
-  if(abrechnungen[weekKey]){ showToast('Diese KW wurde bereits abgerechnet.','warning'); return; }
-
+  if (!weekKey) { showToast('Bitte eine Kalenderwoche wählen.', 'error'); return; }
+  if (abrechnungen[weekKey]) { showToast('Diese KW wurde bereits abgerechnet.', 'warning'); return; }
   const mw = reportData.member[weekKey] || null;
   const gw = reportData.game[weekKey]   || null;
-  if(!mw&&!gw){ showToast('Keine Daten für diese KW.','warning'); return; }
+  if (!mw && !gw) { showToast('Keine Daten für diese KW.', 'warning'); return; }
 
   const kontoVor = parseFloat(document.getElementById('abrechnungKontoVor').value) || 0;
-
   const [kwStr, yrStr] = weekKey.replace('KW ','').split('/');
   const kwNum = parseInt(kwStr), kwYr = parseInt(yrStr);
   const range = kwRange(kwNum, kwYr);
 
   let heimDelta=0, heimVK=0, heimEK=0;
   const heimBody = [];
-  ARTICLES.filter(a=>!a.legacyAlias).forEach(art=>{
+  ARTICLES.filter(a=>!a.legacyAlias).forEach(art => {
     const artData = mw?.articles[art.name];
     const qty = artData?.qty || 0;
-    const vkTot = qty * art.memberPrice;
-    const ekTot = qty * art.buyPrice;
-    const delta = vkTot - ekTot;
-    heimDelta += delta; heimVK += vkTot; heimEK += ekTot;
-    heimBody.push([ art.name, qty||'–', art.buyPrice.toFixed(2)+' €', art.memberPrice.toFixed(2)+' €', qty?(delta.toFixed(2)+' €'):'–' ]);
+    const vkTot=qty*art.memberPrice, ekTot=qty*art.buyPrice, delta=vkTot-ekTot;
+    heimDelta+=delta; heimVK+=vkTot; heimEK+=ekTot;
+    heimBody.push([art.name, qty||'–', art.buyPrice.toFixed(2)+' €', art.memberPrice.toFixed(2)+' €', qty?(delta.toFixed(2)+' €'):'–']);
   });
   heimBody.push(['GESAMT','', heimEK.toFixed(2)+' €', heimVK.toFixed(2)+' €', heimDelta.toFixed(2)+' €']);
 
   let gastDelta=0, gastVK=0, gastEK=0;
   const gastBody = [];
-  ARTICLES.filter(a=>!a.legacyAlias).forEach(art=>{
-    const d1 = gw?.drinksDetail[art.name];
-    const d2 = gw?.foodDetail[art.name];
-    const qty = (d1?.qty||0) + (d2?.qty||0);
-    const vkTot = qty * art.guestPrice;
-    const ekTot = qty * art.buyPrice;
-    const delta = vkTot - ekTot;
-    gastDelta += delta; gastVK += vkTot; gastEK += ekTot;
-    gastBody.push([ art.name, qty||'–', art.buyPrice.toFixed(2)+' €', art.guestPrice.toFixed(2)+' €', qty?(delta.toFixed(2)+' €'):'–' ]);
+  ARTICLES.filter(a=>!a.legacyAlias).forEach(art => {
+    const qty=(gw?.drinksDetail[art.name]?.qty||0)+(gw?.foodDetail[art.name]?.qty||0);
+    const vkTot=qty*art.guestPrice, ekTot=qty*art.buyPrice, delta=vkTot-ekTot;
+    gastDelta+=delta; gastVK+=vkTot; gastEK+=ekTot;
+    gastBody.push([art.name, qty||'–', art.buyPrice.toFixed(2)+' €', art.guestPrice.toFixed(2)+' €', qty?(delta.toFixed(2)+' €'):'–']);
   });
   gastBody.push(['GESAMT','', gastEK.toFixed(2)+' €', gastVK.toFixed(2)+' €', gastDelta.toFixed(2)+' €']);
 
-  const trinkgeld     = gw?.trinkgeld || 0;
-  const gesamtRoh     = heimDelta + gastDelta;
-  const gesamtUmsatz  = heimVK + gastVK;
-  const kontoNeu      = kontoVor + gesamtRoh;
+  const gesamtRoh    = heimDelta + gastDelta;
+  const gesamtUmsatz = heimVK + gastVK;
+  const kontoNeu     = kontoVor + gesamtRoh;
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  const PW=297, ML=8, MR=8, usableW=PW-ML-MR, colW=usableW/2-2, thirdW=usableW/3;
+  const FS=7, CP=1.4, FS2=8, CP2=2;
 
-  const PW=297, ML=8, MR=8;
-  const usableW = PW - ML - MR;
-  const colW    = usableW / 2 - 2;
-  const thirdW  = usableW / 3;
+  doc.setFontSize(13); doc.setFont(undefined,'bold'); doc.text('Abrechnung Dartabteilung TSV', ML, 12);
+  doc.setFontSize(9);  doc.setFont(undefined,'normal'); doc.text(`${weekKey}   ${range.label}`, PW-MR, 12, { align:'right' });
 
-  doc.setFontSize(13); doc.setFont(undefined,'bold');
-  doc.text('Abrechnung Dartabteilung TSV', ML, 12);
-  doc.setFontSize(9); doc.setFont(undefined,'normal');
-  doc.text(`${weekKey}   ${range.label}`, PW - MR, 12, { align:'right' });
-
-  const tableStartY = 17;
-  const FS   = 7;
-  const CP   = 1.4;
-
-  doc.autoTable({
-    head:[['Artikel','Menge','EK','VK Mitglied','Delta']],
-    body: heimBody,
-    startY: tableStartY, tableWidth: colW, margin:{ left:ML },
-    styles:{ fontSize:FS, cellPadding:CP },
-    headStyles:{ fillColor:[50,110,50], textColor:255, fontStyle:'bold' },
-    alternateRowStyles:{ fillColor:[235,248,235] },
-    columnStyles:{ 0:{cellWidth:colW*0.40},1:{halign:'center',cellWidth:colW*0.10},2:{halign:'right',cellWidth:colW*0.17},3:{halign:'right',cellWidth:colW*0.18},4:{halign:'right',cellWidth:colW*0.15} },
-    didParseCell(d){ if(d.row.index===heimBody.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,220,180]; } }
+  const tblOpts = (head, body, startY, x, colors) => ({
+    head, body, startY, tableWidth:colW, margin:{left:x},
+    styles:{fontSize:FS,cellPadding:CP},
+    headStyles:{fillColor:colors,textColor:255,fontStyle:'bold'},
+    alternateRowStyles:{fillColor: colors[0]<100 ? [235,248,235]:[255,240,240]},
+    columnStyles:{0:{cellWidth:colW*0.40},1:{halign:'center',cellWidth:colW*0.10},2:{halign:'right',cellWidth:colW*0.17},3:{halign:'right',cellWidth:colW*0.18},4:{halign:'right',cellWidth:colW*0.15}},
+    didParseCell(d){ if(d.row.index===body.length-1){d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=colors[0]<100?[180,220,180]:[240,180,180];} }
   });
+
+  doc.autoTable(tblOpts([['Artikel','Menge','EK','VK Mitglied','Delta']], heimBody, 17, ML,     [50,110,50]));
   const heimEndY = doc.lastAutoTable.finalY;
+  doc.autoTable(tblOpts([['Artikel','Menge','EK','VK Gast','Delta']],    gastBody, 17, ML+colW+4, [160,40,40]));
+  const bottomY = Math.max(heimEndY, doc.lastAutoTable.finalY) + 4;
 
-  const gastX = ML + colW + 4;
-  doc.autoTable({
-    head:[['Artikel','Menge','EK','VK Gast','Delta']],
-    body: gastBody,
-    startY: tableStartY, tableWidth: colW, margin:{ left: gastX },
-    styles:{ fontSize:FS, cellPadding:CP },
-    headStyles:{ fillColor:[160,40,40], textColor:255, fontStyle:'bold' },
-    alternateRowStyles:{ fillColor:[255,240,240] },
-    columnStyles:{ 0:{cellWidth:colW*0.40},1:{halign:'center',cellWidth:colW*0.10},2:{halign:'right',cellWidth:colW*0.17},3:{halign:'right',cellWidth:colW*0.18},4:{halign:'right',cellWidth:colW*0.15} },
-    didParseCell(d){ if(d.row.index===gastBody.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[240,180,180]; } }
-  });
-  const gastEndY = doc.lastAutoTable.finalY;
+  const summBody  = [['Rohertrag Heim:',heimDelta.toFixed(2)+' €'],['Rohertrag Gast:',gastDelta.toFixed(2)+' €'],['Gesamtrohertrag:',gesamtRoh.toFixed(2)+' €'],['Gesamtumsatz:',gesamtUmsatz.toFixed(2)+' €']];
+  const kontoBody = [['Kontostand Vorwoche:',kontoVor.toFixed(2)+' €'],['Delta diese Woche:',gesamtRoh.toFixed(2)+' €'],['Neuer Kontostand:',kontoNeu.toFixed(2)+' €']];
+  const cW3=thirdW-2;
 
-  const bottomY = Math.max(heimEndY, gastEndY) + 4;
-  const c1x=ML, c2x=ML+thirdW+1, c3x=ML+thirdW*2+2, cW3=thirdW-2, FS2=8, CP2=2;
+  const mk3 = (head, body, startY, x, hiIdx, hiColor) => doc.autoTable({
+    head:[[{content:head,colSpan:2,styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2}}]],
+    body, startY, tableWidth:cW3, margin:{left:x},
+    styles:{fontSize:FS2,cellPadding:CP2}, alternateRowStyles:{fillColor:[245,245,245]},
+    columnStyles:{0:{fontStyle:'bold',cellWidth:cW3*0.58},1:{halign:'right',cellWidth:cW3*0.42}},
+    didParseCell(d){ if(d.row.index===hiIdx){d.cell.styles.fontStyle='bold';d.cell.styles.fillColor=hiColor;if(hiColor[2]===255)d.cell.styles.fontSize=9.5;} }
+  });
 
-  const summBody=[
-    ['Rohertrag Heim:', heimDelta.toFixed(2)+' €'],
-    ['Rohertrag Gast:', gastDelta.toFixed(2)+' €'],
-    ['Gesamtrohertrag:', gesamtRoh.toFixed(2)+' €'],
-    ['Gesamtumsatz:', gesamtUmsatz.toFixed(2)+' €'],
-  ];
-  doc.autoTable({
-    head:[[{ content:'Zusammenfassung', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body: summBody, startY: bottomY, tableWidth: cW3, margin:{ left: c1x },
-    styles:{ fontSize:FS2, cellPadding:CP2 }, alternateRowStyles:{ fillColor:[245,245,245] },
-    columnStyles:{ 0:{fontStyle:'bold',cellWidth:cW3*0.58}, 1:{halign:'right',cellWidth:cW3*0.42} },
-    didParseCell(d){ if(d.row.index===2){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[210,210,210]; } if(d.row.index===3){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,210,255]; d.cell.styles.fontSize=9.5; } }
-  });
-  const kontoBody=[
-    ['Kontostand Vorwoche:', kontoVor.toFixed(2)+' €'],
-    ['Delta diese Woche:', gesamtRoh.toFixed(2)+' €'],
-    ['Neuer Kontostand:', kontoNeu.toFixed(2)+' €'],
-  ];
-  doc.autoTable({
-    head:[[{ content:'Kontostand', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body: kontoBody, startY: doc.lastAutoTable.finalY+2, tableWidth: cW3, margin:{ left: c1x },
-    styles:{ fontSize:FS2, cellPadding:CP2 }, alternateRowStyles:{ fillColor:[245,245,245] },
-    columnStyles:{ 0:{fontStyle:'bold',cellWidth:cW3*0.58}, 1:{halign:'right',cellWidth:cW3*0.42} },
-    didParseCell(d){ if(d.row.index===2){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[180,210,255]; d.cell.styles.fontSize=9.5; } }
-  });
-  doc.autoTable({
-    head:[[{ content:'Belege:', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body:[['',''],['',''],['',''],['',''],['',''],['Auslagen gesamt:','']],
-    startY: bottomY, tableWidth: cW3, margin:{ left: c2x },
-    styles:{ fontSize:FS2, cellPadding:CP2, minCellHeight:6 },
-    columnStyles:{ 0:{cellWidth:cW3*0.5}, 1:{cellWidth:cW3*0.5} },
-    didParseCell(d){ if(d.row.index===5){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[245,245,245]; } }
-  });
-  doc.autoTable({
-    head:[[{ content:'Unterschriften', colSpan:2, styles:{halign:'left',fillColor:[80,80,80],textColor:255,fontStyle:'bold',fontSize:FS2} }]],
-    body:[['Datum:',''],['',''],['Unterschrift Dart:',''],['',''],['Unterschrift TSV:',''],['','']],
-    startY: bottomY, tableWidth: cW3, margin:{ left: c3x },
-    styles:{ fontSize:FS2, cellPadding:CP2, minCellHeight:6 },
-    columnStyles:{ 0:{cellWidth:cW3*0.45, fontStyle:'bold'}, 1:{cellWidth:cW3*0.55} },
-    didParseCell(d){ if(d.row.index%2===1){ d.cell.styles.minCellHeight=9; } }
-  });
+  mk3('Zusammenfassung', summBody,  bottomY,                              ML,        2, [210,210,210]);
+  mk3('Kontostand',      kontoBody, doc.lastAutoTable.finalY+2,           ML,        2, [180,210,255]);
+  mk3('Belege:',         [['',''],['',''],['',''],['',''],['',''],['Auslagen gesamt:','']], bottomY, ML+thirdW+1, -1, []);
+  mk3('Unterschriften',  [['Datum:',''],['',''],['Unterschrift Dart:',''],['',''],['Unterschrift TSV:',''],['','']], bottomY, ML+thirdW*2+2, -1, []);
 
   const pdfData = doc.output('datauristring');
+  const abrData = { weekKey, week:kwNum, year:kwYr, kwRange:range.label, kontoVor, kontoNeu, gesamtRoh, gesamtUmsatz, pdfData, createdAt:new Date().toISOString() };
 
-  const abrData = {
-    weekKey, week:kwNum, year:kwYr, kwRange: range.label,
-    kontoVor, kontoNeu, gesamtRoh, gesamtUmsatz,
-    pdfData, createdAt: new Date().toISOString()
-  };
   try {
     const existingId = abrechnungen[weekKey]?.id;
-    if(existingId){
-      await fbUpdate('abrechnungen', existingId, abrData);
-    } else {
-      const newId = await fbAdd('abrechnungen', abrData);
-      abrData.id = newId;
-    }
-    // abrechnungen[weekKey] wird durch onSnapshot aktualisiert
+    if (existingId) { await fbUpdate('abrechnungen', existingId, abrData); }
+    else            { await fbAdd('abrechnungen', abrData); }
     document.getElementById('modalCreateAbrechnung').classList.add('hidden');
     openPdfDataUri(pdfData);
     showToast(`Abrechnung ${weekKey} erstellt! Neuer Kontostand: ${kontoNeu.toFixed(2)} €`);
-  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Abrechnung.','error'); }
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Abrechnung.', 'error'); }
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -2138,32 +2091,40 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async ()=>{
 const MODALS = ['modalMember','modalBooking','modalEditBooking','modalHistory','modalSettle',
   'modalGame','modalGuestDrinks','modalGuestFood','modalGuestSettle',
   'modalWeekDetails','modalCreateAbrechnung','modalConfirm'];
-
-document.addEventListener('keydown', e=>{
-  if(e.key==='Escape') MODALS.forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') MODALS.forEach(id => document.getElementById(id)?.classList.add('hidden'));
 });
-MODALS.forEach(id=>{
-  document.getElementById(id)?.addEventListener('click', e=>{
-    if(e.target===document.getElementById(id)) document.getElementById(id).classList.add('hidden');
+MODALS.forEach(id => {
+  document.getElementById(id)?.addEventListener('click', e => {
+    if (e.target === document.getElementById(id)) document.getElementById(id).classList.add('hidden');
   });
 });
 
 // ══════════════════════════════════════════════════════════════
 // INIT
+// Löst das Race-Condition-Problem: onAuthStateChanged im ES-Modul
+// kann vor dem load-Event feuern. Wir prüfen deshalb in beiden
+// Richtungen und starten die Listener nur einmal (listenersActive-Guard).
 // ══════════════════════════════════════════════════════════════
-window.addEventListener('load', () => {
-  showPage('members');
-
-  function initData() {
+function tryInit() {
+  if (window.currentFirebaseUser) {
+    showPage('members');
     startRealtimeListeners();
   }
+}
 
-  if (window.currentFirebaseUser) {
-    initData();
-  }
-
-  window.addEventListener('userLoggedIn', initData, { once: false });
+// Fall 1: Seite lädt, User ist bereits eingeloggt (z.B. nach Reload)
+window.addEventListener('load', () => {
+  showPage('members');
+  tryInit();
 });
+
+// Fall 2: User loggt sich ein, nachdem die Seite geladen hat
+window.addEventListener('userLoggedIn', () => {
+  showPage('members');
+  startRealtimeListeners();
+});
+
 </script>
 </body>
 </html>
