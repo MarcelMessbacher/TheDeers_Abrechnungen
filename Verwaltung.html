@@ -694,8 +694,13 @@ document.getElementById('btnConfirmOk').addEventListener('click', () => {
 
 function setSyncStatus(status, text) {
   const ind = document.getElementById('syncIndicator');
-  ind.className = (status === 'ok') ? '' : status;
-  document.getElementById('syncText').textContent = text;
+  if (status === 'ok') {
+    ind.classList.add('hidden');
+  } else {
+    ind.classList.remove('hidden');
+    ind.className = status;
+    document.getElementById('syncText').textContent = text;
+  }
 }
 
 function openPdfDataUri(dataUri) {
@@ -1235,7 +1240,12 @@ function refreshHistoryModal(memberId) {
   // Alle Buchungen des Mitglieds, neuste zuerst, max. HIST_MAX_TOTAL
   const allBks = Object.values(buchungenCache)
     .filter(b => b.memberId === memberId)
-    .sort((a, b) => b.date.localeCompare(a.date))
+	.sort((a, b) => {
+	  const dateCmp = b.date.localeCompare(a.date);
+	  if (dateCmp !== 0) return dateCmp;
+	  // Bei gleichem Datum: offen (settled=false) zuerst
+	  return (a.settled ? 1 : 0) - (b.settled ? 1 : 0);
+	})
     .slice(0, HIST_MAX_TOTAL);
 
   const tbody = document.getElementById('histBody');
