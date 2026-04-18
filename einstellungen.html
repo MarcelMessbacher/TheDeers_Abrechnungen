@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Einstellungen – The Deers</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const cfg = {
+      apiKey: "AIzaSyD5B4C8EiEdLA2XWLzb2JvcFi9DAnV1M7E",
+      authDomain: "thedeersabrechnung.firebaseapp.com",
+      projectId: "thedeersabrechnung",
+      storageBucket: "thedeersabrechnung.firebasestorage.app",
+      messagingSenderId: "27261468983",
+      appId: "1:27261468983:web:1a6340756263aad9455ab2"
+    };
+    const app  = initializeApp(cfg);
+    const db   = getFirestore(app);
+    const auth = getAuth(app);
+
+    // ── Default-Daten (identisch mit Verwaltung.html) ──
+    const DEFAULT_ARTICLES = [
+      { id:'g1', name:'Softdrink/Wasser',       type:'drink', buyPrice:2.00, memberPrice:2.00, guestPrice:2.50 },
+      { id:'g2', name:'Bier des Monats',         type:'drink', buyPrice:2.20, memberPrice:2.20, guestPrice:3.50 },
+      { id:'g3', name:'Krausenbier',             type:'drink', buyPrice:2.20, memberPrice:2.20, guestPrice:3.00 },
+      { id:'g4', name:'Weizen',                  type:'drink', buyPrice:2.20, memberPrice:2.20, guestPrice:3.50 },
+      { id:'g5', name:'Winzerschorle',           type:'drink', buyPrice:1.40, memberPrice:3.00, guestPrice:4.50 },
+      { id:'g6', name:'Kaffee/Tee',              type:'drink', buyPrice:0.30, memberPrice:1.50, guestPrice:1.50 },
+      { id:'g7', name:'Cola',                    type:'drink', buyPrice:0.80, memberPrice:2.50, guestPrice:2.50 },
+      { id:'e1', name:'Pizza',                   type:'food',  buyPrice:4.80, memberPrice:5.50, guestPrice:9.00 },
+      { id:'e2', name:'1/2 Pizza',               type:'food',  buyPrice:2.40, memberPrice:2.80, guestPrice:4.50, guestDisabled:true },
+      { id:'e3', name:'Chicken Nuggets',         type:'food',  buyPrice:2.30, memberPrice:3.50, guestPrice:5.00 },
+      { id:'e4', name:'Chilli Cheese Nuggets',   type:'food',  buyPrice:2.30, memberPrice:3.50, guestPrice:5.00 },
+      { id:'e5', name:'Riegel',                  type:'food',  buyPrice:0.50, memberPrice:0.60, guestPrice:1.00 },
+      { id:'e6', name:'Belegte Brötchen',        type:'food',  buyPrice:1.40, memberPrice:2.50, guestPrice:2.50 },
+    ];
+    const DEFAULT_TEAMS = [
+      { name:'TheDeers I' },
+      { name:'TheDeers II' },
+      { name:'TheDeers III' },
+      { name:'TheDeers IV' },
+    ];
+
+    // ── State ──
+    let articles = [];
+    let teams    = [];
+    let editArticleId = null;
+    let editTeamId    = null;
+
+    // ── Helpers ──
+    const fEuro = v => ((v||0).toFixed(2).replace('.',',') + ' €');
+    const esc   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    function showToast(msg, type='success') {
+      document.querySelectorAll('.toast').forEach(t => t.remove());
+      const t = document.createElement('div');
+      t.className = `toast ${type}`; t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.classList.add('show'), 80);
+      setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3200);
+    }
+
+    // ── Firebase CRUD ──
+    async function loadArticles() {
+      const snap = await getDocs(collection(db, 'artikel'));
+      articles = [];
+      snap.forEach(d => articles.push({ firestoreId: d.id, ...d.data() }));
+      if (!articles.length) {
+        // Erstbefüllung mit Defaults
+        for (const a of DEFAULT_ARTICLES) {
+          const ref = await addDoc(collection(db, 'artikel'), a);
+          articles.push({ firestoreId: ref.id, ...a });
+        }
+        showToast('Standard-Artikel wurden angelegt.', 'success');
+      }
+      articles.sort((a,b) => {
+        if (a.type !== b.type) return a.type === 'drink' ? -1 : 1;
+        return (a.name||'').localeCompare(b.name||'', 'de');
+      });
+      renderArticles();
+    }
+
+    async function loadTeams() {
+      const snap = await getDocs(collection(db, 'teams'));
+      teams = [];
+      snap.forEach(d => teams.push({ firestoreId: d.id, ...d.data() }));
+      if (!teams.length) {
+        for (const t of DEFAULT_TEAMS) {
+          const ref = await addDoc(collection(db, 'teams'), t);
+          teams.push({ firestoreId: ref.id, ...t });
+        }
+        showToast('Standard-Teams wurden angelegt.', 'success');
+      }
+      teams.sort((a,b) => (a.name||'').localeCompare(b.name||'', 'de'));
+      renderTeams();
+    }
+
+    async function saveArticle(data) {
+      if (editArticleId) {
+        await updateDoc(doc(db, 'artikel', editArticleId), { ...data, updatedAt: new Date().toISOString() });
+      } else {
+        await addDoc(collection(db, 'artikel'), { ...data, createdAt: new Date().toISOString() });
+      }
+      await loadArticles();
+    }
+
+    async function deleteArticle(firestoreId) {
+      await deleteDoc(doc(db, 'artikel', firestoreId));
+      await loadArticles();
+    }
+
+    async function saveTeam(data) {
+      if (editTeamId) {
+        await updateDoc(doc(db, 'teams', editTeamId), { ...data, updatedAt: new Date().toISOString() });
+      } else {
+        await addDoc(collection(db, 'teams'), { ...data, createdAt: new Date().toISOString() });
+      }
+      await loadTeams();
+    }
+
+    async function deleteTeam(firestoreId) {
+      await deleteDoc(doc(db, 'teams', firestoreId));
+      await loadTeams();
+    }
+
+    // ── Render ──
+    function renderArticles() {
+      const drinks = articles.filter(a => a.type === 'drink');
+      const food   = articles.filter(a => a.type === 'food');
+      const mkTable = (list, label) => {
+        if (!list.length) return `<p class="text-gray-400 text-sm mb-4">Keine ${label} vorhanden.</p>`;
+        return `
+          <h3 class="font-semibold text-gray-700 mb-2">${label}</h3>
+          <div class="overflow-x-auto mb-6">
+            <table class="w-full text-sm border-collapse bg-white shadow rounded" style="min-width:580px">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="p-2 border text-left">Name</th>
+                  <th class="p-2 border text-right">EK (€)</th>
+                  <th class="p-2 border text-right">Mitglieder VK (€)</th>
+                  <th class="p-2 border text-right">Gast VK (€)</th>
+                  <th class="p-2 border text-center">Gast deaktiviert</th>
+                  <th class="p-2 border text-center">Aktion</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${list.map(a => `
+                  <tr class="hover:bg-gray-50">
+                    <td class="p-2 border font-medium">${esc(a.name)}</td>
+                    <td class="p-2 border text-right">${a.buyPrice.toFixed(2)}</td>
+                    <td class="p-2 border text-right">${a.memberPrice.toFixed(2)}</td>
+                    <td class="p-2 border text-right">${a.guestPrice.toFixed(2)}</td>
+                    <td class="p-2 border text-center">${a.guestDisabled ? '✓' : '–'}</td>
+                    <td class="p-2 border text-center">
+                      <button data-edit-art="${a.firestoreId}" class="text-base mr-1 hover:scale-110 transition-transform">✏️</button>
+                      <button data-del-art="${a.firestoreId}" class="text-base text-red-500 hover:scale-110 transition-transform">🗑️</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      };
+      document.getElementById('articlesList').innerHTML =
+        mkTable(drinks, 'Getränke') + mkTable(food, 'Essen');
+
+      document.querySelectorAll('[data-edit-art]').forEach(btn => {
+        btn.addEventListener('click', () => openEditArticle(btn.dataset.editArt));
+      });
+      document.querySelectorAll('[data-del-art]').forEach(btn => {
+        btn.addEventListener('click', () => confirmDelete('Artikel', () => deleteArticle(btn.dataset.delArt)));
+      });
+    }
+
+    function renderTeams() {
+      const c = document.getElementById('teamsList');
+      if (!teams.length) { c.innerHTML = '<p class="text-gray-400 text-sm">Keine Teams vorhanden.</p>'; return; }
+      c.innerHTML = `
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse bg-white shadow rounded" style="min-width:280px">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="p-2 border text-left">Teamname</th>
+                <th class="p-2 border text-center">Aktion</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${teams.map(t => `
+                <tr class="hover:bg-gray-50">
+                  <td class="p-2 border font-medium">${esc(t.name)}</td>
+                  <td class="p-2 border text-center">
+                    <button data-edit-team="${t.firestoreId}" class="text-base mr-1 hover:scale-110 transition-transform">✏️</button>
+                    <button data-del-team="${t.firestoreId}" class="text-base text-red-500 hover:scale-110 transition-transform">🗑️</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+
+      document.querySelectorAll('[data-edit-team]').forEach(btn => {
+        btn.addEventListener('click', () => openEditTeam(btn.dataset.editTeam));
+      });
+      document.querySelectorAll('[data-del-team]').forEach(btn => {
+        btn.addEventListener('click', () => confirmDelete('Team', () => deleteTeam(btn.dataset.delTeam)));
+      });
+    }
+
+    // ── Modals ──
+    function openEditArticle(firestoreId) {
+      const a = articles.find(x => x.firestoreId === firestoreId);
+      if (!a) return;
+      editArticleId = firestoreId;
+      document.getElementById('artModalTitle').textContent = 'Artikel bearbeiten';
+      document.getElementById('artName').value         = a.name || '';
+      document.getElementById('artType').value         = a.type || 'drink';
+      document.getElementById('artBuyPrice').value     = a.buyPrice.toFixed(2);
+      document.getElementById('artMemberPrice').value  = a.memberPrice.toFixed(2);
+      document.getElementById('artGuestPrice').value   = a.guestPrice.toFixed(2);
+      document.getElementById('artGuestDisabled').checked = !!a.guestDisabled;
+      document.getElementById('modalArticle').classList.remove('hidden');
+    }
+
+    function openNewArticle() {
+      editArticleId = null;
+      document.getElementById('artModalTitle').textContent = 'Neuer Artikel';
+      ['artName','artBuyPrice','artMemberPrice','artGuestPrice'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('artType').value = 'drink';
+      document.getElementById('artGuestDisabled').checked = false;
+      document.getElementById('modalArticle').classList.remove('hidden');
+    }
+
+    function openEditTeam(firestoreId) {
+      const t = teams.find(x => x.firestoreId === firestoreId);
+      if (!t) return;
+      editTeamId = firestoreId;
+      document.getElementById('teamModalTitle').textContent = 'Team bearbeiten';
+      document.getElementById('teamName').value = t.name || '';
+      document.getElementById('modalTeam').classList.remove('hidden');
+    }
+
+    function openNewTeam() {
+      editTeamId = null;
+      document.getElementById('teamModalTitle').textContent = 'Neues Team';
+      document.getElementById('teamName').value = '';
+      document.getElementById('modalTeam').classList.remove('hidden');
+    }
+
+    let pendingDeleteCb = null;
+    function confirmDelete(label, cb) {
+      pendingDeleteCb = cb;
+      document.getElementById('confirmMsg').textContent = `${label} wirklich löschen?`;
+      document.getElementById('modalConfirm').classList.remove('hidden');
+    }
+
+    // ── Event Listeners (after DOM ready) ──
+    window.addEventListener('DOMContentLoaded', () => {
+      // Login
+      document.getElementById('loginForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const email = document.getElementById('loginEmail').value.trim();
+        const pwd   = document.getElementById('loginPassword').value;
+        const btn   = document.getElementById('loginButton');
+        const err   = document.getElementById('loginError');
+        btn.disabled = true; btn.textContent = 'Anmelden…'; err.classList.add('hidden');
+        try {
+          await signInWithEmailAndPassword(auth, email, pwd);
+        } catch {
+          err.textContent = 'Ungültige E-Mail oder Passwort.'; err.classList.remove('hidden');
+        } finally { btn.disabled = false; btn.textContent = 'Anmelden'; }
+      });
+
+      // Auth state
+      onAuthStateChanged(auth, user => {
+        if (user) {
+          document.getElementById('loginPage').classList.add('hidden');
+          document.getElementById('mainApp').classList.remove('hidden');
+          loadArticles();
+          loadTeams();
+        } else {
+          document.getElementById('loginPage').classList.remove('hidden');
+          document.getElementById('mainApp').classList.add('hidden');
+        }
+      });
+
+      // Logout
+      document.getElementById('btnLogout').addEventListener('click', async () => {
+        await signOut(auth);
+        showToast('Abgemeldet.');
+      });
+
+      // Artikel Modal
+      document.getElementById('btnNewArticle').addEventListener('click', openNewArticle);
+      document.getElementById('btnCancelArticle').addEventListener('click', () => {
+        document.getElementById('modalArticle').classList.add('hidden');
+      });
+      document.getElementById('btnSaveArticle').addEventListener('click', async () => {
+        const name        = document.getElementById('artName').value.trim();
+        const type        = document.getElementById('artType').value;
+        const buyPrice    = parseFloat(document.getElementById('artBuyPrice').value);
+        const memberPrice = parseFloat(document.getElementById('artMemberPrice').value);
+        const guestPrice  = parseFloat(document.getElementById('artGuestPrice').value);
+        const guestDisabled = document.getElementById('artGuestDisabled').checked;
+        if (!name) { showToast('Bitte Name eingeben.', 'error'); return; }
+        if (isNaN(buyPrice)||isNaN(memberPrice)||isNaN(guestPrice)) { showToast('Bitte gültige Preise eingeben.', 'error'); return; }
+        try {
+          await saveArticle({ name, type, buyPrice, memberPrice, guestPrice, guestDisabled });
+          document.getElementById('modalArticle').classList.add('hidden');
+          showToast(editArticleId ? 'Artikel aktualisiert.' : 'Artikel angelegt.');
+        } catch(e) { console.error(e); showToast('Fehler beim Speichern.', 'error'); }
+      });
+
+      // Team Modal
+      document.getElementById('btnNewTeam').addEventListener('click', openNewTeam);
+      document.getElementById('btnCancelTeam').addEventListener('click', () => {
+        document.getElementById('modalTeam').classList.add('hidden');
+      });
+      document.getElementById('btnSaveTeam').addEventListener('click', async () => {
+        const name = document.getElementById('teamName').value.trim();
+        if (!name) { showToast('Bitte Teamname eingeben.', 'error'); return; }
+        try {
+          await saveTeam({ name });
+          document.getElementById('modalTeam').classList.add('hidden');
+          showToast(editTeamId ? 'Team aktualisiert.' : 'Team angelegt.');
+        } catch(e) { console.error(e); showToast('Fehler beim Speichern.', 'error'); }
+      });
+
+      // Confirm Modal
+      document.getElementById('btnConfirmCancel').addEventListener('click', () => {
+        document.getElementById('modalConfirm').classList.add('hidden');
+        pendingDeleteCb = null;
+      });
+      document.getElementById('btnConfirmOk').addEventListener('click', async () => {
+        document.getElementById('modalConfirm').classList.add('hidden');
+        if (pendingDeleteCb) { await pendingDeleteCb(); pendingDeleteCb = null; }
+        showToast('Gelöscht.');
+      });
+
+      // ESC
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          ['modalArticle','modalTeam','modalConfirm'].forEach(id =>
+            document.getElementById(id).classList.add('hidden'));
+        }
+      });
+
+      // Tab switching
+      document.getElementById('tabBtnArticles').addEventListener('click', () => switchTab('articles'));
+      document.getElementById('tabBtnTeams').addEventListener('click',    () => switchTab('teams'));
+    });
+
+    function switchTab(tab) {
+      ['articles','teams'].forEach(t => {
+        document.getElementById(`section-${t}`).classList.toggle('hidden', t !== tab);
+        document.getElementById(`tabBtn${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('active', t === tab);
+      });
+    }
+  </script>
+  <style>
+    .toast { position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+      background:#16A34A;color:#fff;padding:12px 24px;border-radius:8px;
+      box-shadow:0 4px 12px rgba(0,0,0,.15);font-weight:500;z-index:9999;
+      opacity:0;transition:opacity .3s;max-width:90vw;text-align:center; }
+    .toast.show { opacity:1; }
+    .toast.error   { background:#DC2626; }
+    .toast.warning { background:#f59e0b; }
+    .hidden { display:none !important; }
+    .login-wrap { min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f8f9; }
+    .login-box  { background:#fff;padding:2rem;border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,.2);width:100%;max-width:400px; }
+    .linput { width:100%;padding:12px;border:2px solid #e1e5e9;border-radius:6px;font-size:16px;transition:border-color .3s; }
+    .linput:focus { outline:none;border-color:#667eea; }
+    .lbtn { width:100%;padding:12px;background:#667eea;color:#fff;border:none;border-radius:6px;font-size:16px;font-weight:600;cursor:pointer;transition:background .3s; }
+    .lbtn:hover { background:#5a67d8; }
+    .lbtn:disabled { background:#a0aec0;cursor:not-allowed; }
+    .tab-btn { transition:all .2s;padding:0.5rem 1.25rem;border-bottom:3px solid transparent;color:#6b7280; }
+    .tab-btn.active { border-bottom-color:#374151;font-weight:700;color:#111827; }
+  </style>
+</head>
+<body class="bg-gray-100 p-3 sm:p-6">
+
+<!-- LOGIN -->
+<div id="loginPage" class="login-wrap">
+  <div class="login-box">
+    <div class="text-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-800">Einstellungen</h1>
+      <h2 class="text-lg text-gray-600">The Deers – TSV Hirschaid</h2>
+    </div>
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-700">E-Mail</label>
+        <input type="email" id="loginEmail" class="linput" placeholder="E-Mail eingeben" required>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-700">Passwort</label>
+        <input type="password" id="loginPassword" class="linput" placeholder="Passwort eingeben" required>
+      </div>
+      <button type="submit" id="loginButton" class="lbtn">Anmelden</button>
+      <div id="loginError" class="text-red-600 text-sm text-center hidden mt-2"></div>
+    </form>
+  </div>
+</div>
+
+<!-- HAUPT-APP -->
+<div id="mainApp" class="hidden max-w-5xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">Einstellungen</h1>
+      <p class="text-gray-500 text-sm">The Deers – TSV Hirschaid</p>
+    </div>
+    <button id="btnLogout" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 font-semibold text-sm">Abmelden</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 border-b mb-6">
+    <button id="tabBtnArticles" class="tab-btn active">Artikel</button>
+    <button id="tabBtnTeams"    class="tab-btn">Teams</button>
+  </div>
+
+  <!-- Artikel -->
+  <div id="section-articles">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-gray-700">Artikel verwalten</h2>
+      <button id="btnNewArticle" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-semibold text-sm">+ Neuer Artikel</button>
+    </div>
+    <div id="articlesList"><p class="text-gray-400">Lade…</p></div>
+  </div>
+
+  <!-- Teams -->
+  <div id="section-teams" class="hidden">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-gray-700">Teams verwalten</h2>
+      <button id="btnNewTeam" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-semibold text-sm">+ Neues Team</button>
+    </div>
+    <div id="teamsList"><p class="text-gray-400">Lade…</p></div>
+  </div>
+</div>
+
+<!-- MODAL: Artikel -->
+<div id="modalArticle" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-md">
+    <h2 id="artModalTitle" class="text-xl font-bold mb-4">Neuer Artikel</h2>
+    <div class="space-y-3">
+      <div>
+        <label class="block text-sm font-medium mb-1">Name *</label>
+        <input type="text" id="artName" class="border rounded w-full p-2" placeholder="z.B. Weizen">
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Typ *</label>
+        <select id="artType" class="border rounded w-full p-2">
+          <option value="drink">Getränk</option>
+          <option value="food">Essen</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1">EK (€) *</label>
+          <input type="number" id="artBuyPrice" class="border rounded w-full p-2" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">VK Mitglied (€) *</label>
+          <input type="number" id="artMemberPrice" class="border rounded w-full p-2" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">VK Gast (€) *</label>
+          <input type="number" id="artGuestPrice" class="border rounded w-full p-2" step="0.01" min="0" placeholder="0.00">
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="artGuestDisabled" class="w-4 h-4">
+        <label for="artGuestDisabled" class="text-sm">Für Gäste deaktiviert (nicht buchbar bei Heimspielen)</label>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-5">
+      <button id="btnCancelArticle" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+      <button id="btnSaveArticle"   class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Team -->
+<div id="modalTeam" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-sm">
+    <h2 id="teamModalTitle" class="text-xl font-bold mb-4">Neues Team</h2>
+    <div>
+      <label class="block text-sm font-medium mb-1">Teamname *</label>
+      <input type="text" id="teamName" class="border rounded w-full p-2" placeholder="z.B. TheDeers V">
+    </div>
+    <div class="flex justify-end gap-2 mt-5">
+      <button id="btnCancelTeam" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+      <button id="btnSaveTeam"   class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Bestätigung -->
+<div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-sm">
+    <h2 class="text-xl font-bold mb-4">Bestätigung erforderlich</h2>
+    <p id="confirmMsg" class="mb-6 text-gray-700"></p>
+    <div class="flex justify-end gap-2">
+      <button id="btnConfirmCancel" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+      <button id="btnConfirmOk"     class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Löschen</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
