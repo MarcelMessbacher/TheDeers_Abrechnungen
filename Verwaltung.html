@@ -1159,11 +1159,22 @@ document.getElementById('btnSaveBooking').addEventListener('click', async () => 
   if (!items.length) { showToast('Bitte mindestens einen Artikel wählen.', 'error'); return; }
   const date = document.getElementById('bkDate').value;
   if (!date) { showToast('Bitte Datum wählen.', 'error'); return; }
+
+  const btn = document.getElementById('btnSaveBooking');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Buchen…';
+
   try {
     await addBookingAtomically(bookingMemberId, { memberId:bookingMemberId, date, items, totalVK:r2(vk), totalEK:r2(ek), settled:false, settledAt:null });
     document.getElementById('modalBooking').classList.add('hidden');
     showToast(`Buchung gespeichert: ${fEuro(vk)}`);
-  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Buchung.', 'error'); }
+  } catch(e) {
+    console.error(e);
+    showToast('Fehler beim Speichern der Buchung.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Buchen';
+  }
 });
 
 // ── Buchung bearbeiten ──
@@ -1291,10 +1302,16 @@ function refreshHistoryModal(memberId) {
         ? `<span class="text-green-600">✓ ${b.settledAt ? fDate(b.settledAt) : ''}</span>`
         : '<span class="text-orange-500">offen</span>'}</td>
       <td class="p-2 border text-center">
-        ${!b.settled
-          ? `<button onclick="openEditBookingModal('${b.id}')" class="text-base mr-1">✏️</button>
-             <button onclick="deleteBooking('${b.id}')" class="text-base text-red-500">🗑️</button>`
-          : '<span class="text-gray-300 text-xs">–</span>'}
+        ${(() => {
+          if (b.settled) return '<span class="text-gray-300 text-xs">–</span>';
+          const d = new Date(b.date);
+          const { week: wk, isoYear: yr } = getISOWeek(d);
+          const kwKey = `KW ${String(wk).padStart(2,'0')}/${yr}`;
+          const kwAbgerechnet = !!abrechnungen[kwKey];
+          if (kwAbgerechnet) return '<span class="text-gray-400 text-xs" title="KW wurde bereits abgerechnet">🔒</span>';
+          return `<button onclick="openEditBookingModal('${b.id}')" class="text-base mr-1">✏️</button>
+                  <button onclick="deleteBooking('${b.id}')" class="text-base text-red-500">🗑️</button>`;
+        })()}
       </td>`;
     tbody.appendChild(row);
   });
