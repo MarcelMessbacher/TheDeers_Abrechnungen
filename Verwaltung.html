@@ -1425,8 +1425,12 @@ function clearGameForm() {
   document.getElementById('gDate').value     = '';
   document.querySelector('#guestTableBody').innerHTML = '';
 }
-function initGuestRows() { for (let i = 0; i < 4; i++) addGuestRow(); }
-function addGuestRow() {
+function initGuestRows() {
+  for (let i = 0; i < 4; i++) addGuestRow(true);
+  // Leere Zeilen müssen nicht sortiert werden
+}
+
+function addGuestRow(skipSort = false) {
   const tbody = document.getElementById('guestTableBody');
   const row   = document.createElement('tr');
   row.innerHTML = `
@@ -1444,8 +1448,24 @@ function addGuestRow() {
     const nm = row.querySelector('input').value.trim() || 'diesen Gast';
     showConfirm(`${nm} wirklich löschen?`, () => { row.remove(); updateFinalizeBtn(); });
   });
+
+  // Beim Tippen neu sortieren
+  row.querySelector('input[type="text"]').addEventListener('blur', () => sortGuestRows());
+
+  if (!skipSort) sortGuestRows();
 }
 document.getElementById('btnAddGuestRow').addEventListener('click', addGuestRow);
+
+function sortGuestRows() {
+  const tbody = document.getElementById('guestTableBody');
+  const rows  = [...tbody.querySelectorAll('tr')];
+  rows.sort((a, b) => {
+    const nameA = a.querySelector('input[type="text"]')?.value.trim().toLowerCase() || '';
+    const nameB = b.querySelector('input[type="text"]')?.value.trim().toLowerCase() || '';
+    return nameA.localeCompare(nameB, 'de');
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
 
 // ── Getränke/Essen für Gast ──
 function openGuestDrinks(row) {
@@ -1688,7 +1708,7 @@ function editGame(gameId) {
   const tbody = document.getElementById('guestTableBody');
   if (g.gaeste && g.gaeste.length) {
     g.gaeste.forEach(gst => {
-      addGuestRow();
+      addGuestRow(true);
       const row = tbody.lastChild;
       row.querySelector('input[type="text"]').value = gst.name || '';
       row.setAttribute('data-drinks', gst.getraenke || '{}');
@@ -1706,9 +1726,10 @@ function editGame(gameId) {
         const ltd = row.querySelectorAll('td')[5]; if (ltd) ltd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
       }
     });
+    sortGuestRows();
   } else { initGuestRows(); }
   document.getElementById('modalGame').classList.remove('hidden');
-  updateFinalizeBtn();
+	updateFinalizeBtn();
 }
 window.editGame = editGame;
 
