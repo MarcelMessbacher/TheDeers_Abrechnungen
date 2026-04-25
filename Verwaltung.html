@@ -1460,6 +1460,9 @@ function sortGuestRows() {
   const tbody = document.getElementById('guestTableBody');
   const rows  = [...tbody.querySelectorAll('tr')];
   rows.sort((a, b) => {
+    const paidA = a.getAttribute('data-paid') === 'true' ? 1 : 0;
+    const paidB = b.getAttribute('data-paid') === 'true' ? 1 : 0;
+    if (paidA !== paidB) return paidA - paidB;
     const nameA = a.querySelector('input[type="text"]')?.value.trim().toLowerCase() || '';
     const nameB = b.querySelector('input[type="text"]')?.value.trim().toLowerCase() || '';
     return nameA.localeCompare(nameB, 'de');
@@ -1597,6 +1600,7 @@ document.getElementById('btnGuestPaid').addEventListener('click', () => {
   const lastTd = activeGuestRow.querySelectorAll('td')[5];
   if (lastTd) lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
   document.getElementById('modalGuestSettle').classList.add('hidden');
+  sortGuestRows();
   activeGuestRow = null;
   updateFinalizeBtn();
 });
