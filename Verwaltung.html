@@ -1157,8 +1157,9 @@ document.getElementById('btnSaveBooking').addEventListener('click', async () => 
     }
   });
   if (!items.length) { showToast('Bitte mindestens einen Artikel wählen.', 'error'); return; }
-  const date = document.getElementById('bkDate').value;
-  if (!date) { showToast('Bitte Datum wählen.', 'error'); return; }
+	const date = document.getElementById('bkDate').value;
+	if (!date) { showToast('Bitte Datum wählen.', 'error'); return; }
+	if (date < today()) { showToast('Buchungen in der Vergangenheit sind nicht erlaubt.', 'error'); return; }
 
   const btn = document.getElementById('btnSaveBooking');
   btn.disabled = true;
