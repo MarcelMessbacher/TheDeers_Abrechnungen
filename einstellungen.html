@@ -145,6 +145,7 @@
                   <th class="p-2 border text-right">Mitglieder VK (€)</th>
                   <th class="p-2 border text-right">Gast VK (€)</th>
                   <th class="p-2 border text-center">Gast deaktiviert</th>
+				  <th class="p-2 border text-center">In Abrechnung</th>
                   <th class="p-2 border text-center">Aktion</th>
                 </tr>
               </thead>
@@ -156,6 +157,7 @@
                     <td class="p-2 border text-right">${a.memberPrice.toFixed(2)}</td>
                     <td class="p-2 border text-right">${a.guestPrice.toFixed(2)}</td>
                     <td class="p-2 border text-center">${a.guestDisabled ? '✓' : '–'}</td>
+					<td class="p-2 border text-center">${a.excludeFromReport ? '–' : '✓'}</td>
                     <td class="p-2 border text-center">
                       <button data-edit-art="${a.firestoreId}" class="text-base mr-1 hover:scale-110 transition-transform">✏️</button>
                       <button data-del-art="${a.firestoreId}" class="text-base text-red-500 hover:scale-110 transition-transform">🗑️</button>
@@ -221,6 +223,7 @@
       document.getElementById('artMemberPrice').value  = a.memberPrice.toFixed(2);
       document.getElementById('artGuestPrice').value   = a.guestPrice.toFixed(2);
       document.getElementById('artGuestDisabled').checked = !!a.guestDisabled;
+	  document.getElementById('artExcludeFromReport').checked = !!a.excludeFromReport;
       document.getElementById('modalArticle').classList.remove('hidden');
     }
 
@@ -230,6 +233,7 @@
       ['artName','artBuyPrice','artMemberPrice','artGuestPrice'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('artType').value = 'drink';
       document.getElementById('artGuestDisabled').checked = false;
+	  document.getElementById('artExcludeFromReport').checked = false;
       document.getElementById('modalArticle').classList.remove('hidden');
     }
 
@@ -304,10 +308,11 @@
         const memberPrice = parseFloat(document.getElementById('artMemberPrice').value);
         const guestPrice  = parseFloat(document.getElementById('artGuestPrice').value);
         const guestDisabled = document.getElementById('artGuestDisabled').checked;
+		const excludeFromReport = document.getElementById('artExcludeFromReport').checked;
         if (!name) { showToast('Bitte Name eingeben.', 'error'); return; }
         if (isNaN(buyPrice)||isNaN(memberPrice)||isNaN(guestPrice)) { showToast('Bitte gültige Preise eingeben.', 'error'); return; }
         try {
-          await saveArticle({ name, type, buyPrice, memberPrice, guestPrice, guestDisabled });
+          await saveArticle({ name, type, buyPrice, memberPrice, guestPrice, guestDisabled, excludeFromReport });
           document.getElementById('modalArticle').classList.add('hidden');
           showToast(editArticleId ? 'Artikel aktualisiert.' : 'Artikel angelegt.');
         } catch(e) { console.error(e); showToast('Fehler beim Speichern.', 'error'); }
@@ -472,6 +477,10 @@
         <input type="checkbox" id="artGuestDisabled" class="w-4 h-4">
         <label for="artGuestDisabled" class="text-sm">Für Gäste deaktiviert (nicht buchbar bei Heimspielen)</label>
       </div>
+	  <div class="flex items-center gap-2">
+		<input type="checkbox" id="artExcludeFromReport" class="w-4 h-4">
+		<label for="artExcludeFromReport" class="text-sm">Von Abrechnung ausschließen (wird nicht im Abrechnungs-PDF aufgeführt)</label>
+	  </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
       <button id="btnCancelArticle" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>

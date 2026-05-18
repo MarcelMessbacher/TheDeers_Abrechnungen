@@ -2058,7 +2058,7 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
 
   let heimDelta=0, heimVK=0, heimEK=0;
   const heimBody = [];
-  ARTICLES.forEach(art => {
+  ARTICLES.filter(art => !art.excludeFromReport).forEach(art => {
     const artData = mw?.articles[art.name];
     const qty = artData?.qty || 0;
     const vkTot=qty*art.memberPrice, ekTot=qty*art.buyPrice, delta=vkTot-ekTot;
@@ -2069,7 +2069,7 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
 
   let gastDelta=0, gastVK=0, gastEK=0;
   const gastBody = [];
-  ARTICLES.forEach(art => {
+  ARTICLES.filter(art => !art.excludeFromReport).forEach(art => {
     const qty=(gw?.drinksDetail[art.name]?.qty||0)+(gw?.foodDetail[art.name]?.qty||0);
     const vkTot=qty*art.guestPrice, ekTot=qty*art.buyPrice, delta=vkTot-ekTot;
     gastDelta+=delta; gastVK+=vkTot; gastEK+=ekTot;
