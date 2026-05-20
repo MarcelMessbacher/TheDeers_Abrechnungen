@@ -648,6 +648,7 @@ const HIST_MAX_TOTAL = 20;
 let settleMemberId   = null;
 let confirmCb        = null;
 let editGameId       = null;
+let gameSnapshot 	 = null;
 let activeGuestRow   = null;
 let reportData       = { member:{}, game:{} };
 let currentReportTab = 'members';
@@ -704,6 +705,9 @@ function showConfirm(msg, cb) {
   document.getElementById('confirmMsg').textContent = msg;
   confirmCb = cb;
   document.getElementById('modalConfirm').classList.remove('hidden');
+}
+function confirmDiscard(cb) {
+  showConfirm('Ungespeicherte Änderungen verwerfen?', cb);
 }
 document.getElementById('btnConfirmCancel').addEventListener('click', () => {
   document.getElementById('modalConfirm').classList.add('hidden'); confirmCb = null;
@@ -1138,6 +1142,9 @@ function updateBkSums() {
   document.getElementById('bkSumFood').textContent   = fEuro(sf);
   document.getElementById('bkTotal').textContent     = fEuro(sd+sf);
 }
+function hasBkChanges() {
+  return ARTICLES.some(a => (bookingQty[a.firestoreId || a.id] || 0) > 0);
+}
 function switchBkTab(tab) {
   document.querySelectorAll('#modalBooking .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('tabBkDrinks').classList.toggle('hidden', tab !== 'bkDrinks');
@@ -1145,7 +1152,13 @@ function switchBkTab(tab) {
 }
 window.switchBkTab = switchBkTab;
 
-document.getElementById('btnCancelBooking').addEventListener('click', () => document.getElementById('modalBooking').classList.add('hidden'));
+document.getElementById('btnCancelBooking').addEventListener('click', () => {
+  if (hasBkChanges()) {
+    confirmDiscard(() => document.getElementById('modalBooking').classList.add('hidden'));
+  } else {
+    document.getElementById('modalBooking').classList.add('hidden');
+  }
+});
 document.getElementById('btnSaveBooking').addEventListener('click', async () => {
   if (!bookingMemberId) return;
   const items = []; let vk = 0, ek = 0;
@@ -1433,9 +1446,20 @@ document.getElementById('btnNewGame').addEventListener('click', () => {
   initGuestRows();
   document.getElementById('modalGame').classList.remove('hidden');
   updateFinalizeBtn();
+  gameSnapshot = takeGameSnapshot();
 });
 document.getElementById('btnCloseGame').addEventListener('click', () => {
-  document.getElementById('modalGame').classList.add('hidden'); clearGameForm();
+  if (hasGameChanges()) {
+    confirmDiscard(() => {
+      gameSnapshot = null;
+      document.getElementById('modalGame').classList.add('hidden');
+      clearGameForm();
+    });
+  } else {
+    gameSnapshot = null;
+    document.getElementById('modalGame').classList.add('hidden');
+    clearGameForm();
+  }
 });
 function clearGameForm() {
   document.getElementById('gTeam').value     = '';
@@ -1528,7 +1552,14 @@ document.getElementById('btnSaveGDrinks').addEventListener('click', () => {
   document.getElementById('modalGuestDrinks').classList.add('hidden');
   activeGuestRow = null;
 });
-document.getElementById('btnCloseGDrinks').addEventListener('click', () => document.getElementById('modalGuestDrinks').classList.add('hidden'));
+document.getElementById('btnCloseGDrinks').addEventListener('click', () => {
+  if (hasGDrinksChanges()) {
+    confirmDiscard(() => { document.getElementById('modalGuestDrinks').classList.add('hidden'); activeGuestRow = null; });
+  } else {
+    document.getElementById('modalGuestDrinks').classList.add('hidden');
+    activeGuestRow = null;
+  }
+});
 
 function openGuestFood(row) {
   activeGuestRow = row;
@@ -1556,6 +1587,33 @@ function updateGFoodSum() {
   let s = 0; document.querySelectorAll('#gFoodBody .gFSum').forEach(td => s += parseFloat(td.textContent)||0);
   document.getElementById('gFoodSum').textContent = s.toFixed(2);
 }
+function hasGDrinksChanges() {
+  if (!activeGuestRow) return false;
+  const saved = activeGuestRow.getAttribute('data-drinks');
+  const savedData = saved ? JSON.parse(saved) : {};
+  let changed = false;
+  document.querySelectorAll('#gDrinksBody tr').forEach(tr => {
+    const nm = tr.children[0]?.textContent.trim();
+    const q  = parseInt(tr.querySelector('.gDrinkQty')?.value) || 0;
+    const savedQ = savedData[nm] || 0;
+    if (q !== savedQ) changed = true;
+  });
+  return changed;
+}
+
+function hasGFoodChanges() {
+  if (!activeGuestRow) return false;
+  const saved = activeGuestRow.getAttribute('data-food');
+  const savedData = saved ? JSON.parse(saved) : {};
+  let changed = false;
+  document.querySelectorAll('#gFoodBody tr').forEach(tr => {
+    const nm = tr.children[0]?.textContent.trim();
+    const q  = parseInt(tr.querySelector('.gFoodQty')?.value) || 0;
+    const savedQ = savedData[nm] || 0;
+    if (q !== savedQ) changed = true;
+  });
+  return changed;
+}
 document.getElementById('btnSaveGFood').addEventListener('click', () => {
   if (!activeGuestRow) return;
   const data = {};
@@ -1569,7 +1627,14 @@ document.getElementById('btnSaveGFood').addEventListener('click', () => {
   document.getElementById('modalGuestFood').classList.add('hidden');
   activeGuestRow = null;
 });
-document.getElementById('btnCloseGFood').addEventListener('click', () => document.getElementById('modalGuestFood').classList.add('hidden'));
+document.getElementById('btnCloseGFood').addEventListener('click', () => {
+  if (hasGFoodChanges()) {
+    confirmDiscard(() => { document.getElementById('modalGuestFood').classList.add('hidden'); activeGuestRow = null; });
+  } else {
+    document.getElementById('modalGuestFood').classList.add('hidden');
+    activeGuestRow = null;
+  }
+});
 
 function updateGuestRowTotal(row) {
   let s = 0;
@@ -1636,6 +1701,40 @@ function updateFinalizeBtn() {
   btn.classList.toggle('cursor-not-allowed',!allPaid);
 }
 
+function takeGameSnapshot() {
+  const rows = [...document.querySelectorAll('#guestTableBody tr')];
+  return {
+    team:     document.getElementById('gTeam').value.trim(),
+    opponent: document.getElementById('gOpponent').value.trim(),
+    date:     document.getElementById('gDate').value.trim(),
+    guests: rows.map(r => ({
+      name:   r.querySelector('input[type="text"]')?.value.trim() || '',
+      drinks: r.getAttribute('data-drinks') || '{}',
+      food:   r.getAttribute('data-food')   || '{}',
+      paid:   r.getAttribute('data-paid')   || 'false',
+      tip:    r.getAttribute('data-tip')    || '0.00'
+    }))
+  };
+}
+
+function hasGameChanges() {
+  if (!gameSnapshot) return false;
+  const current = takeGameSnapshot();
+  if (current.team     !== gameSnapshot.team)     return true;
+  if (current.opponent !== gameSnapshot.opponent) return true;
+  if (current.date     !== gameSnapshot.date)     return true;
+  if (current.guests.length !== gameSnapshot.guests.length) return true;
+  for (let i = 0; i < current.guests.length; i++) {
+    const c = current.guests[i], s = gameSnapshot.guests[i];
+    if (c.name   !== s.name)   return true;
+    if (c.drinks !== s.drinks) return true;
+    if (c.food   !== s.food)   return true;
+    if (c.paid   !== s.paid)   return true;
+    if (c.tip    !== s.tip)    return true;
+  }
+  return false;
+}
+
 function collectGaeste() {
   const gaeste = [];
   document.querySelectorAll('#guestTableBody tr').forEach(row => {
@@ -1662,7 +1761,7 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
   try {
     if (editGameId) { await fbUpdate('spiele', editGameId, gData); }
     else            { await fbAdd('spiele', gData); }
-    editGameId = null;
+	editGameId = null; gameSnapshot = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
     showToast(`Spiel ${allPaid ? 'bereit' : 'als Entwurf'} gespeichert!`);
@@ -1709,7 +1808,7 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async () =>
   try {
     if (editGameId) { await fbUpdate('spiele', editGameId, gData); }
     else            { await fbAdd('spiele', gData); }
-    editGameId = null;
+    editGameId = null; gameSnapshot = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
     openPdfDataUri(pdfData);
@@ -1751,7 +1850,8 @@ function editGame(gameId) {
     sortGuestRows();
   } else { initGuestRows(); }
   document.getElementById('modalGame').classList.remove('hidden');
-	updateFinalizeBtn();
+  updateFinalizeBtn();
+  gameSnapshot = takeGameSnapshot();
 }
 window.editGame = editGame;
 
@@ -2136,16 +2236,81 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
 // ══════════════════════════════════════════════════════════════
 // ESC + MODAL-HINTERGRUND SCHLIEßEN
 // ══════════════════════════════════════════════════════════════
-const MODALS = ['modalMember','modalBooking','modalEditBooking','modalHistory','modalSettle',
-  'modalGame','modalGuestDrinks','modalGuestFood','modalGuestSettle',
-  'modalWeekDetails','modalCreateAbrechnung','modalConfirm'];
+const MODALS = ['modalMember','modalEditBooking','modalHistory','modalSettle',
+  'modalGuestSettle','modalWeekDetails','modalCreateAbrechnung','modalConfirm'];
+// Modals mit Verwerfen-Schutz werden separat behandelt:
+const GUARDED_MODALS = ['modalBooking', 'modalGame', 'modalGuestDrinks', 'modalGuestFood'];
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') MODALS.forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  if (e.key !== 'Escape') return;
+  MODALS.forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  // Geschützte Modals
+  if (!document.getElementById('modalBooking').classList.contains('hidden') && hasBkChanges()) {
+    confirmDiscard(() => document.getElementById('modalBooking').classList.add('hidden'));
+  } else if (!document.getElementById('modalBooking').classList.contains('hidden')) {
+    document.getElementById('modalBooking').classList.add('hidden');
+  }
+  if (!document.getElementById('modalGame').classList.contains('hidden') && hasGameChanges()) {
+    confirmDiscard(() => { gameSnapshot = null; document.getElementById('modalGame').classList.add('hidden'); });
+  } else if (!document.getElementById('modalGame').classList.contains('hidden')) {
+    gameSnapshot = null; document.getElementById('modalGame').classList.add('hidden');
+  }
+  if (!document.getElementById('modalGuestDrinks').classList.contains('hidden') && hasGDrinksChanges()) {
+    confirmDiscard(() => document.getElementById('modalGuestDrinks').classList.add('hidden'));
+  } else if (!document.getElementById('modalGuestDrinks').classList.contains('hidden')) {
+    document.getElementById('modalGuestDrinks').classList.add('hidden');
+  }
+  if (!document.getElementById('modalGuestFood').classList.contains('hidden') && hasGFoodChanges()) {
+    confirmDiscard(() => document.getElementById('modalGuestFood').classList.add('hidden'));
+  } else if (!document.getElementById('modalGuestFood').classList.contains('hidden')) {
+    document.getElementById('modalGuestFood').classList.add('hidden');
+  }
 });
+
 MODALS.forEach(id => {
   document.getElementById(id)?.addEventListener('click', e => {
     if (e.target === document.getElementById(id)) document.getElementById(id).classList.add('hidden');
   });
+});
+
+// Hintergrund-Klick für geschützte Modals
+document.getElementById('modalBooking').addEventListener('click', e => {
+  if (e.target !== document.getElementById('modalBooking')) return;
+  if (hasBkChanges()) {
+    confirmDiscard(() => document.getElementById('modalBooking').classList.add('hidden'));
+  } else {
+    document.getElementById('modalBooking').classList.add('hidden');
+  }
+});
+document.getElementById('modalGame').addEventListener('click', e => {
+  if (e.target !== document.getElementById('modalGame')) return;
+  if (hasGameChanges()) {
+    confirmDiscard(() => {
+      gameSnapshot = null;
+      document.getElementById('modalGame').classList.add('hidden');
+      clearGameForm();
+    });
+  } else {
+    gameSnapshot = null;
+    document.getElementById('modalGame').classList.add('hidden');
+    clearGameForm();
+  }
+});
+document.getElementById('modalGuestDrinks').addEventListener('click', e => {
+  if (e.target !== document.getElementById('modalGuestDrinks')) return;
+  if (hasGDrinksChanges()) {
+    confirmDiscard(() => document.getElementById('modalGuestDrinks').classList.add('hidden'));
+  } else {
+    document.getElementById('modalGuestDrinks').classList.add('hidden');
+  }
+});
+document.getElementById('modalGuestFood').addEventListener('click', e => {
+  if (e.target !== document.getElementById('modalGuestFood')) return;
+  if (hasGFoodChanges()) {
+    confirmDiscard(() => document.getElementById('modalGuestFood').classList.add('hidden'));
+  } else {
+    document.getElementById('modalGuestFood').classList.add('hidden');
+  }
 });
 
 // ══════════════════════════════════════════════════════════════
