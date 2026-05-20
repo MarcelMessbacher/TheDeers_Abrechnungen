@@ -765,14 +765,18 @@ async function fbDelete(coll, id) {
 }
 
 async function addBookingAtomically(memberId, bookingData) {
-  const bkId = await fbAdd('buchungen', bookingData);
   const memberRef = FU().doc(DB(), 'mitglieder', memberId);
+  const newBkRef  = FU().doc(FU().collection(DB(), 'buchungen'));
   await FU().runTransaction(DB(), async tx => {
     const snap = await tx.get(memberRef);
     if (!snap.exists()) throw new Error('Mitglied nicht gefunden');
-    tx.update(memberRef, { balance: r2((snap.data().balance||0) + bookingData.totalVK), updatedAt: new Date().toISOString() });
+    tx.set(newBkRef, { ...bookingData, createdAt: new Date().toISOString() });
+    tx.update(memberRef, {
+      balance:   r2((snap.data().balance||0) + bookingData.totalVK),
+      updatedAt: new Date().toISOString()
+    });
   });
-  return bkId;
+  return newBkRef.id;
 }
 
 async function updateBookingAtomically(bookingId, newItems, newVK, newEK) {
@@ -1755,17 +1759,25 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
   const opp  = document.getElementById('gOpponent').value;
   const date = document.getElementById('gDate').value;
   if (!team || !opp || !date) { showToast('Bitte Team, Gegner und Datum ausfüllen.', 'error'); return; }
-  const gaeste   = collectGaeste();
-  const allPaid  = gaeste.length > 0 && gaeste.every(g => g.paid);
-  const gData    = { team, opponent:opp, date, gaeste, status: allPaid ? 'ready' : 'draft' };
+  const gaeste  = collectGaeste();
+  const allPaid = gaeste.length > 0 && gaeste.every(g => g.paid);
+  const gData   = { team, opponent:opp, date, gaeste, status: allPaid ? 'ready' : 'draft' };
+  const btn = document.getElementById('btnSaveGame');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Speichern…';
   try {
     if (editGameId) { await fbUpdate('spiele', editGameId, gData); }
     else            { await fbAdd('spiele', gData); }
-	editGameId = null; gameSnapshot = null;
+    editGameId = null; gameSnapshot = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
     showToast(`Spiel ${allPaid ? 'bereit' : 'als Entwurf'} gespeichert!`);
-  } catch(e) { console.error(e); showToast('Fehler beim Speichern des Spiels.', 'error'); }
+  } catch(e) {
+    console.error(e); showToast('Fehler beim Speichern des Spiels.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Speichern';
+  }
 });
 
 document.getElementById('btnFinalizeGame').addEventListener('click', async () => {
@@ -1773,47 +1785,63 @@ document.getElementById('btnFinalizeGame').addEventListener('click', async () =>
   const opp  = document.getElementById('gOpponent').value;
   const date = document.getElementById('gDate').value;
   if (!team || !opp || !date) { showToast('Bitte alle Felder ausfüllen.', 'error'); return; }
-  const gaeste = collectGaeste();
-  const gData  = { team, opponent:opp, date, gaeste, status:'finalized', finalizedAt: new Date().toISOString() };
 
-  const { jsPDF } = window.jspdf;
-  const pdoc = new jsPDF();
-  const tData = []; const dSum = {}, fSum = {}; let totAmt = 0, totTip = 0;
-  gaeste.forEach(g => {
-    const dr = JSON.parse(g.getraenke||'{}'); const fo = JSON.parse(g.essen||'{}');
-    let ga = 0;
-    for (const [n,q] of Object.entries(dr)) { const a=guestDrinkList.find(x=>x.name===n); if(a){ga+=a.preis*q; dSum[n]=(dSum[n]||0)+q;} }
-    for (const [n,q] of Object.entries(fo)) { const a=guestFoodList.find(x=>x.name===n);  if(a){ga+=a.preis*q; fSum[n]=(fSum[n]||0)+q;} }
-    const tip = parseFloat(g.tip||0); totAmt += ga; totTip += tip;
-    tData.push([g.name,
-      Object.entries(dr).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
-      Object.entries(fo).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
-      ga.toFixed(2)+' €', tip.toFixed(2)+' €']);
-  });
-  tData.push(['SUMME',
-    Object.entries(dSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
-    Object.entries(fSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
-    totAmt.toFixed(2)+' €', totTip.toFixed(2)+' €']);
-  pdoc.setFontSize(16); pdoc.text(`Abrechnung: ${team} vs ${opp}`, 10, 15);
-  pdoc.setFontSize(12); pdoc.text(`Datum: ${fDate(date)}`, 10, 25);
-  pdoc.autoTable({ head:[['Name','Getränke','Essen','Zwischensumme','Trinkgeld']], body:tData,
-    styles:{fontSize:9,cellPadding:2}, headStyles:{fillColor:[70,130,180],textColor:255}, startY:35,
-    alternateRowStyles:{fillColor:[245,245,245]},
-    didParseCell(d){ if(d.row.index===tData.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[220,220,220]; } }
-  });
-  pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`, 10, pdoc.lastAutoTable.finalY+10);
-  const pdfData = pdoc.output('datauristring');
-  gData.pdfData = pdfData; gData.pdfCreatedAt = new Date().toISOString();
+  const btn = document.getElementById('btnFinalizeGame');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Erstelle PDF…';
+
+  // PDF-Generierung in nächsten Tick → UI zeigt Spinner bevor JS-Thread blockiert
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   try {
+    const gaeste = collectGaeste();
+    const gData  = { team, opponent:opp, date, gaeste, status:'finalized', finalizedAt: new Date().toISOString() };
+
+    const { jsPDF } = window.jspdf;
+    const pdoc = new jsPDF();
+    const tData = []; const dSum = {}, fSum = {}; let totAmt = 0, totTip = 0;
+    gaeste.forEach(g => {
+      const dr = JSON.parse(g.getraenke||'{}'); const fo = JSON.parse(g.essen||'{}');
+      let ga = 0;
+      for (const [n,q] of Object.entries(dr)) { const a=guestDrinkList.find(x=>x.name===n); if(a){ga+=a.preis*q; dSum[n]=(dSum[n]||0)+q;} }
+      for (const [n,q] of Object.entries(fo)) { const a=guestFoodList.find(x=>x.name===n);  if(a){ga+=a.preis*q; fSum[n]=(fSum[n]||0)+q;} }
+      const tip = parseFloat(g.tip||0); totAmt += ga; totTip += tip;
+      tData.push([g.name,
+        Object.entries(dr).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
+        Object.entries(fo).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
+        ga.toFixed(2)+' €', tip.toFixed(2)+' €']);
+    });
+    tData.push(['SUMME',
+      Object.entries(dSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
+      Object.entries(fSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
+      totAmt.toFixed(2)+' €', totTip.toFixed(2)+' €']);
+    pdoc.setFontSize(16); pdoc.text(`Abrechnung: ${team} vs ${opp}`, 10, 15);
+    pdoc.setFontSize(12); pdoc.text(`Datum: ${fDate(date)}`, 10, 25);
+    pdoc.autoTable({ head:[['Name','Getränke','Essen','Zwischensumme','Trinkgeld']], body:tData,
+      styles:{fontSize:9,cellPadding:2}, headStyles:{fillColor:[70,130,180],textColor:255}, startY:35,
+      alternateRowStyles:{fillColor:[245,245,245]},
+      didParseCell(d){ if(d.row.index===tData.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[220,220,220]; } }
+    });
+    pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`, 10, pdoc.lastAutoTable.finalY+10);
+    const pdfData = pdoc.output('datauristring');
+    gData.pdfData = pdfData; gData.pdfCreatedAt = new Date().toISOString();
+
+    btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Speichern…';
+
     if (editGameId) { await fbUpdate('spiele', editGameId, gData); }
     else            { await fbAdd('spiele', gData); }
+
     editGameId = null; gameSnapshot = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
     openPdfDataUri(pdfData);
     showToast('Spiel final abgerechnet!');
-  } catch(e) { console.error(e); showToast('Fehler beim Finalisieren.', 'error'); }
+  } catch(e) {
+    console.error(e); showToast('Fehler beim Finalisieren.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Spiel abrechnen';
+  }
 });
 
 function editGame(gameId) {
