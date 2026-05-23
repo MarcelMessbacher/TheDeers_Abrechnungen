@@ -627,6 +627,17 @@
   </div>
 </div>
 
+<div id="modalGuestDetail" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-bold mb-1">Bestellung</h2>
+    <p id="guestDetailName" class="text-sm text-gray-500 mb-4"></p>
+    <div id="guestDetailContent"></div>
+    <div class="flex justify-end mt-4">
+      <button onclick="document.getElementById('modalGuestDetail').classList.add('hidden')" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════════════════════
 // ARTIKEL & TEAMS – werden aus Firestore geladen
@@ -1528,6 +1539,54 @@ function renderGames() {
   });
 }
 
+function sortedGaeste(gaeste) {
+  if (!gaeste) return [];
+  return [...gaeste].sort((a, b) => {
+    const paidA = a.paid ? 1 : 0;
+    const paidB = b.paid ? 1 : 0;
+    if (paidA !== paidB) return paidA - paidB;
+    return (a.name || '').localeCompare(b.name || '', 'de');
+  });
+}
+
+function qvShowGuestDetail(gameId, guestIdx) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const gst = g.gaeste[guestIdx]; if (!gst) return;
+  document.getElementById('guestDetailName').textContent = gst.name || '';
+  const tipVal = parseFloat(gst.tip || 0);
+  let html = '';
+  const dr = JSON.parse(gst.getraenke || '{}');
+  if (Object.keys(dr).length) {
+    html += '<h3 class="font-semibold mb-2">Getränke:</h3><ul class="list-disc ml-5 text-sm mb-3">';
+    for (const [n, q] of Object.entries(dr)) {
+      const a = guestDrinkList.find(x => x.name === n);
+      html += `<li>${esc(n)}: ${q}× ${a ? fEuro(a.preis * q) : ''}</li>`;
+    }
+    html += '</ul>';
+  }
+  const fo = JSON.parse(gst.essen || '{}');
+  if (Object.keys(fo).length) {
+    html += '<h3 class="font-semibold mb-2">Essen:</h3><ul class="list-disc ml-5 text-sm mb-3">';
+    for (const [n, q] of Object.entries(fo)) {
+      const a = guestFoodList.find(x => x.name === n);
+      html += `<li>${esc(n)}: ${q}× ${a ? fEuro(a.preis * q) : ''}</li>`;
+    }
+    html += '</ul>';
+  }
+  const drTotal = calcGuestTotal(gst, 'drink');
+  const foTotal = calcGuestTotal(gst, 'food');
+  html += `<div class="border-t pt-3 mt-2 text-sm space-y-1">
+    <div class="flex justify-between"><span class="text-gray-600">Getränke:</span><span>${fEuro(drTotal)}</span></div>
+    <div class="flex justify-between"><span class="text-gray-600">Essen:</span><span>${fEuro(foTotal)}</span></div>
+    ${tipVal > 0 ? `<div class="flex justify-between"><span class="text-gray-600">Trinkgeld:</span><span>${fEuro(tipVal)}</span></div>` : ''}
+    <div class="flex justify-between font-bold border-t pt-2"><span>Gesamt:</span><span>${fEuro(drTotal + foTotal)}</span></div>
+  </div>`;
+  if (!html) html = '<p class="text-gray-400">Keine Bestellung erfasst.</p>';
+  document.getElementById('guestDetailContent').innerHTML = html;
+  document.getElementById('modalGuestDetail').classList.remove('hidden');
+}
+window.qvShowGuestDetail = qvShowGuestDetail;
+
 function openQuickView(gameId) {
   quickViewGameId = gameId;
   const col = document.getElementById('games-quickview-col');
@@ -1558,7 +1617,11 @@ function renderQuickView(gameId) {
 
   let guestRows = '';
   if (g.gaeste && g.gaeste.length) {
-    g.gaeste.forEach((gst, idx) => {
+    const gaesteSorted = sortedGaeste(g.gaeste);
+    const originalIndices = gaesteSorted.map(gst => g.gaeste.indexOf(gst));
+
+    gaesteSorted.forEach((gst, si) => {
+      const idx = originalIndices[si];
       const drTotal = calcGuestTotal(gst, 'drink');
       const foTotal = calcGuestTotal(gst, 'food');
       const total   = drTotal + foTotal;
@@ -1571,11 +1634,11 @@ function renderQuickView(gameId) {
           <td class="border p-2 text-sm text-right font-semibold">${total.toFixed(2)} €</td>
           <td class="border p-2 text-center">
             ${gst.paid
-              ? `<span class="text-green-600 text-xs">✓ bezahlt${tipVal > 0 ? ' (+'+tipVal.toFixed(2)+' € TG)' : ''}</span>`
+              ? `<button onclick="qvShowGuestDetail('${gameId}',${idx})" class="bg-gray-400 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">📄 Anzeigen</button>`
               : `<button onclick="qvOpenSettle('${gameId}',${idx})" class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">Abrechnen</button>`}
           </td>
           <td class="border p-2 text-center">
-			<button onclick="qvOpenDrinks('${gameId}',${idx})" class="text-blue-500 hover:bg-gray-200 rounded text-lg px-1" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
+            <button onclick="qvOpenDrinks('${gameId}',${idx})" class="text-blue-500 hover:bg-gray-200 rounded text-lg px-1" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
             <button onclick="qvOpenFood('${gameId}',${idx})" class="text-blue-500 hover:bg-gray-200 rounded text-lg px-1" title="Essen" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🍴</button>
             ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="text-red-400 hover:bg-gray-200 rounded text-lg px-1" title="Gast löschen">🗑️</button>` : ''}
           </td>
