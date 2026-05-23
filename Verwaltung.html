@@ -144,7 +144,7 @@
   flex-shrink: 0;
 }
 #games-quickview-col.open {
-  width: 50%;
+  width: 70%;
   opacity: 1;
   overflow: visible;
 }
@@ -1575,9 +1575,9 @@ function renderQuickView(gameId) {
               : `<button onclick="qvOpenSettle('${gameId}',${idx})" class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">Abrechnen</button>`}
           </td>
           <td class="border p-2 text-center">
-            <button onclick="qvOpenDrinks('${gameId}',${idx})" class="bg-blue-300 hover:bg-blue-400 text-white px-2 py-1 rounded text-xs mr-1" ${gst.paid ? 'disabled style="opacity:.5"' : ''}>🍺</button>
-            <button onclick="qvOpenFood('${gameId}',${idx})" class="bg-blue-300 hover:bg-blue-400 text-white px-2 py-1 rounded text-xs mr-1" ${gst.paid ? 'disabled style="opacity:.5"' : ''}>🍽️</button>
-            ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="bg-red-300 hover:bg-red-400 text-white px-2 py-1 rounded text-xs" title="Gast löschen">🗑️</button>` : ''}
+            <button onclick="qvOpenDrinks('${gameId}',${idx})" class="text-blue-500 hover:text-blue-700 text-lg px-1" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
+            <button onclick="qvOpenFood('${gameId}',${idx})" class="text-blue-500 hover:text-blue-700 text-lg px-1" title="Essen" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🍴</button>
+            ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="text-red-400 hover:text-red-600 text-lg px-1" title="Gast löschen">🗑️</button>` : ''}
           </td>
         </tr>`;
     });
