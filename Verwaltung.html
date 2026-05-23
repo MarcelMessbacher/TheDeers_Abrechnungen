@@ -124,6 +124,67 @@
       margin-bottom: 1.25rem; gap: 0.75rem;
     }
     .app-header img { height: 7rem; width: auto; }
+	
+	/* Heimspiele Split-Layout */
+#games-layout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+#games-list-col {
+  flex: 1 1 0;
+  min-width: 0;
+  transition: flex 0.2s;
+}
+#games-quickview-col {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s, opacity 0.2s;
+  opacity: 0;
+  flex-shrink: 0;
+}
+#games-quickview-col.open {
+  width: 50%;
+  opacity: 1;
+  overflow: visible;
+}
+
+@media (max-width: 768px) {
+  #games-layout {
+    display: block;
+  }
+  #games-quickview-col {
+    width: 100% !important;
+    opacity: 1;
+  }
+  #games-quickview-col.open {
+    width: 100%;
+  }
+  #games-list-col.qv-open {
+    display: none;
+  }
+  #games-quickview-inner {
+    max-height: calc(100vh - 120px);
+  }
+}
+#games-quickview-inner {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+  padding: 16px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  position: sticky;
+  top: 12px;
+}
+.game-list-item {
+  cursor: pointer;
+  user-select: none;
+}
+.game-list-item.selected {
+  border-left: 4px solid #2563eb;
+  background: #eff6ff !important;
+}
   </style>
 </head>
 <body class="bg-gray-100 p-3 sm:p-6">
@@ -190,10 +251,19 @@
   </div>
 
   <!-- ═══════════ SEITE: HEIMSPIELE ═══════════ -->
-  <div id="page-games" class="hidden page-wrap">
-    <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4 hover:bg-green-700 font-semibold">Neues Heimspiel</button>
-    <div id="gamesContainer"></div>
+<div id="page-games" class="hidden page-wrap">
+  <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4 hover:bg-green-700 font-semibold">Neues Heimspiel</button>
+  <div id="games-layout">
+    <div id="games-list-col">
+      <div id="gamesContainer"></div>
+    </div>
+    <div id="games-quickview-col">
+      <div id="games-quickview-inner">
+        <!-- wird per JS befüllt -->
+      </div>
+    </div>
   </div>
+</div>
 
   <!-- ═══════════ SEITE: AUSWERTUNGEN ═══════════ -->
   <div id="page-reports" class="hidden page-wrap">
@@ -420,10 +490,10 @@
 
 <!-- ════════════ MODALS – HEIMSPIELE ════════════ -->
 <div id="modalGame" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
-  <div class="bg-white p-6 rounded w-full max-w-4xl max-h-[90vh] overflow-y-auto modal-bg">
+  <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
-      <h2 class="text-xl font-bold mb-4">Heimspiel</h2>
-      <div class="flex flex-wrap gap-4 mb-4">
+      <h2 class="text-xl font-bold mb-4">Neues Heimspiel</h2>
+      <div class="flex flex-wrap gap-4 mb-6">
         <div>
           <label class="block text-sm font-medium mb-1">Team</label>
           <select id="gTeam" class="border rounded w-44 p-2">
@@ -439,30 +509,13 @@
           <input type="date" id="gDate" class="border rounded w-44 p-2">
         </div>
       </div>
-      <div class="table-scroll">
-        <table class="w-full text-sm mb-4" id="guestTable" style="min-width:500px">
-          <thead class="bg-gray-200">
-            <tr>
-              <th class="p-2 border">Name</th>
-              <th class="p-2 border">Getränke</th>
-              <th class="p-2 border">Essen</th>
-              <th class="p-2 border text-right">Gesamt</th>
-              <th class="p-2 border text-center">Abrechnung</th>
-              <th class="p-2 border text-center">Aktion</th>
-            </tr>
-          </thead>
-          <tbody id="guestTableBody"></tbody>
-        </table>
-      </div>
-      <button id="btnAddGuestRow" class="text-blue-600 mb-4 hover:text-blue-800">+ Gast hinzufügen</button>
       <div class="flex justify-end gap-2">
-        <button id="btnFinalizeGame" class="bg-gray-400 text-white px-4 py-2 rounded cursor-not-allowed" disabled>Spiel abrechnen</button>
-        <button id="btnSaveGame"     class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Speichern</button>
-        <button id="btnCloseGame"    class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+        <button id="btnSaveGame" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Spiel anlegen</button>
+        <button id="btnCloseGame" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
       </div>
     </div>
   </div>
-</div>
+</div>      
 
 <div id="modalGuestDrinks" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -648,6 +701,7 @@ const HIST_MAX_TOTAL = 20;
 let settleMemberId   = null;
 let confirmCb        = null;
 let editGameId       = null;
+let quickViewGameId = null;
 let gameSnapshot 	 = null;
 let activeGuestRow   = null;
 let reportData       = { member:{}, game:{} };
@@ -866,6 +920,15 @@ function startRealtimeListeners() {
     games = [];
     snap.forEach(d => games.push({ id: d.id, firebaseId: d.id, ...d.data() }));
     renderGames();
+    // QuickView aktualisieren falls geöffnet
+    if (quickViewGameId) {
+      const stillExists = games.find(g => g.id === quickViewGameId);
+      if (stillExists && stillExists.status !== 'finalized') {
+        renderQuickView(quickViewGameId);
+      } else {
+        closeQuickView();
+      }
+    }
     if (!document.getElementById('page-reports').classList.contains('hidden')) {
       buildReportDataAndRender();
     }
@@ -1405,16 +1468,49 @@ document.getElementById('btnSaveSettle').addEventListener('click', async () => {
 function renderGames() {
   const c = document.getElementById('gamesContainer');
   const sorted = [...games].sort((a,b) => new Date(b.date) - new Date(a.date));
-  if (!sorted.length) { c.innerHTML = '<p class="text-gray-400 text-center">Noch keine Spiele.</p>'; return; }
+  if (!sorted.length) {
+    c.innerHTML = '<p class="text-gray-400 text-center">Noch keine Spiele.</p>';
+    return;
+  }
   c.innerHTML = '';
   sorted.forEach(g => {
-    const fin = g.status === 'finalized', rdy = g.status === 'ready';
+    const fin = g.status === 'finalized';
+    const rdy = g.status === 'ready';
     const icon      = fin ? '<span class="text-green-600">✓</span>' : rdy ? '<span class="text-blue-600">✓</span>' : '<span class="text-orange-500">⏳</span>';
-    const statusTxt = fin ? '<span class="text-xs text-green-600 font-medium">ABGERECHNET</span>'
-      : rdy ? '<span class="text-xs text-blue-600 font-medium">BEREIT</span>'
-      : '<span class="text-xs text-orange-600 font-medium">ENTWURF</span>';
+    const statusTxt = fin
+      ? '<span class="text-xs text-green-600 font-medium">ABGERECHNET</span>'
+      : rdy
+        ? '<span class="text-xs text-blue-600 font-medium">BEREIT</span>'
+        : '<span class="text-xs text-orange-600 font-medium">ENTWURF</span>';
+
+    const isSelected = g.id === quickViewGameId;
     const div = document.createElement('div');
-    div.className = 'bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md';
+    div.className = 'game-list-item bg-white shadow p-4 mb-2 flex justify-between items-center rounded hover:shadow-md'
+      + (isSelected ? ' selected' : '');
+    div.dataset.gameId = g.id;
+
+    // Klick öffnet QuickView (nur nicht-finalisierte)
+    if (!fin) {
+      div.addEventListener('click', (e) => {
+        // Nicht auslösen wenn Buttons geklickt
+        if (e.target.closest('button')) return;
+        openQuickView(g.id);
+      });
+    }
+
+    // Rechte Seite: Buttons
+    let rightButtons = '';
+    if (fin) {
+      rightButtons = g.pdfData
+        ? `<button onclick="showGamePDF('${g.id}')" class="text-xl" title="PDF anzeigen">📄</button>`
+        : '';
+    } else {
+      const showDelete = !isSelected;
+      rightButtons = (showDelete
+        ? `<button onclick="deleteGame('${g.id}')" class="text-xl text-red-500" title="Löschen">🗑️</button>`
+        : '');
+    }
+
     div.innerHTML = `
       <div>
         <div class="flex items-center gap-2 flex-wrap">
@@ -1427,13 +1523,318 @@ function renderGames() {
           ${statusTxt}
         </div>
       </div>
-      <div class="flex gap-2">
-        ${g.pdfData ? `<button onclick="showGamePDF('${g.id}')" class="text-xl">📄</button>` : ''}
-        ${!fin ? `<button onclick="editGame('${g.id}')" class="text-xl">✏️</button>` : ''}
-        ${!fin ? `<button onclick="deleteGame('${g.id}')" class="text-xl text-red-500">🗑️</button>` : ''}
-      </div>`;
+      <div class="flex gap-2 items-center">${rightButtons}</div>`;
     c.appendChild(div);
   });
+}
+
+function openQuickView(gameId) {
+  quickViewGameId = gameId;
+  const col = document.getElementById('games-quickview-col');
+  col.classList.add('open');
+  // Auf kleinen Bildschirmen Liste ausblenden
+  if (window.innerWidth <= 768) {
+    document.getElementById('games-list-col').classList.add('qv-open');
+  }
+  renderGames();
+  renderQuickView(gameId);
+}
+
+function closeQuickView() {
+  quickViewGameId = null;
+  document.getElementById('games-quickview-col').classList.remove('open');
+  document.getElementById('games-list-col').classList.remove('qv-open');
+  renderGames();
+}
+window.closeQuickView = closeQuickView;
+
+function renderQuickView(gameId) {
+  const g = games.find(x => x.id === gameId);
+  if (!g) return;
+  const inner = document.getElementById('games-quickview-inner');
+
+  // Team-Optionen für Anzeige
+  const teamName = g.team || '–';
+
+  let guestRows = '';
+  if (g.gaeste && g.gaeste.length) {
+    g.gaeste.forEach((gst, idx) => {
+      const drTotal = calcGuestTotal(gst, 'drink');
+      const foTotal = calcGuestTotal(gst, 'food');
+      const total   = drTotal + foTotal;
+      const tipVal  = parseFloat(gst.tip || 0);
+      guestRows += `
+        <tr class="${gst.paid ? 'bg-green-50' : ''}">
+          <td class="border p-2 text-sm font-medium">${esc(gst.name||'')}</td>
+          <td class="border p-2 text-sm text-right">${drTotal.toFixed(2)} €</td>
+          <td class="border p-2 text-sm text-right">${foTotal.toFixed(2)} €</td>
+          <td class="border p-2 text-sm text-right font-semibold">${total.toFixed(2)} €</td>
+          <td class="border p-2 text-center">
+            ${gst.paid
+              ? `<span class="text-green-600 text-xs">✓ bezahlt${tipVal > 0 ? ' (+'+tipVal.toFixed(2)+' € TG)' : ''}</span>`
+              : `<button onclick="qvOpenSettle('${gameId}',${idx})" class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs">Abrechnen</button>`}
+          </td>
+          <td class="border p-2 text-center">
+            <button onclick="qvOpenDrinks('${gameId}',${idx})" class="bg-blue-300 hover:bg-blue-400 text-white px-2 py-1 rounded text-xs mr-1" ${gst.paid ? 'disabled style="opacity:.5"' : ''}>🍺</button>
+            <button onclick="qvOpenFood('${gameId}',${idx})" class="bg-blue-300 hover:bg-blue-400 text-white px-2 py-1 rounded text-xs mr-1" ${gst.paid ? 'disabled style="opacity:.5"' : ''}>🍽️</button>
+            ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="bg-red-300 hover:bg-red-400 text-white px-2 py-1 rounded text-xs" title="Gast löschen">🗑️</button>` : ''}
+          </td>
+        </tr>`;
+    });
+  } else {
+    guestRows = `<tr><td colspan="6" class="p-3 text-center text-gray-400 text-sm">Noch keine Gäste.</td></tr>`;
+  }
+
+  const allPaid = g.gaeste && g.gaeste.length > 0 && g.gaeste.every(gst => gst.paid);
+
+  inner.innerHTML = `
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <div class="text-base font-bold text-gray-800">${esc(teamName)} <span class="font-normal text-gray-400">vs</span> ${esc(g.opponent||'')}</div>
+        <div class="text-sm text-gray-500">${fDate(g.date)}</div>
+      </div>
+      <div class="flex gap-2 items-center">
+        ${allPaid ? `<button onclick="qvFinalizeGame('${gameId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-semibold">✓ Abrechnen</button>` : ''}
+        <button onclick="deleteGame('${gameId}')" class="text-red-500 text-xl hover:scale-110 transition-transform" title="Spiel löschen">🗑️</button>
+        <button onclick="closeQuickView()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none" title="Schließen">×</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse" style="min-width:400px">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="border p-2 text-left">Name</th>
+            <th class="border p-2 text-right">Getränke</th>
+            <th class="border p-2 text-right">Essen</th>
+            <th class="border p-2 text-right">Gesamt</th>
+            <th class="border p-2 text-center">Abrechnung</th>
+            <th class="border p-2 text-center">Buchen</th>
+          </tr>
+        </thead>
+        <tbody>${guestRows}</tbody>
+      </table>
+    </div>
+    <div class="mt-3">
+      <button onclick="qvAddGuest('${gameId}')" class="text-blue-600 hover:text-blue-800 text-sm">+ Gast hinzufügen</button>
+    </div>`;
+}
+window.renderQuickView = renderQuickView;
+
+// Gast hinzufügen direkt aus QuickView (speichert sofort)
+async function qvAddGuest(gameId) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const name = prompt('Name des Gastes:');
+  if (!name || !name.trim()) return;
+  const gaeste = [...(g.gaeste||[]), { name: name.trim(), getraenke:'{}', essen:'{}', paid:false, tip:'0.00' }];
+  try {
+    await fbUpdate('spiele', gameId, { gaeste });
+    showToast(`Gast „${name.trim()}" hinzugefügt.`);
+    // renderQuickView wird via onSnapshot automatisch aufgerufen
+  } catch(e) { console.error(e); showToast('Fehler beim Speichern.', 'error'); }
+}
+window.qvAddGuest = qvAddGuest;
+
+async function qvDeleteGuest(gameId, guestIdx) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const gst = g.gaeste[guestIdx];
+  const name = gst?.name || 'diesen Gast';
+  showConfirm(`„${name}" wirklich aus der Liste entfernen?`, async () => {
+    const gaeste = JSON.parse(JSON.stringify(g.gaeste));
+    gaeste.splice(guestIdx, 1);
+    const allPaid = gaeste.length > 0 && gaeste.every(gs => gs.paid);
+    const status  = gaeste.length === 0 ? 'draft' : allPaid ? 'ready' : 'draft';
+    try {
+      await fbUpdate('spiele', gameId, { gaeste, status });
+      showToast(`„${name}" entfernt.`);
+    } catch(e) { console.error(e); showToast('Fehler beim Löschen.', 'error'); }
+  });
+}
+window.qvDeleteGuest = qvDeleteGuest;
+
+// Getränke für Gast (QuickView-Variante – öffnet vorhandenes modalGuestDrinks)
+function qvOpenDrinks(gameId, guestIdx) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const gst = g.gaeste[guestIdx]; if (!gst) return;
+
+  // activeGuestRow simulieren über Objekt-Proxy
+  activeGuestRow = createQvProxy(gameId, guestIdx, 'drinks');
+
+  const tbody = document.getElementById('gDrinksBody'); tbody.innerHTML = '';
+  const data  = JSON.parse(gst.getraenke || '{}');
+  guestDrinkList.filter(x => !x.disabled).forEach(gd => {
+    const menge = data[gd.name] || 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="p-2 border">${esc(gd.name)}</td><td class="p-2 border text-right">${gd.preis.toFixed(2)} €</td>
+      <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
+        <input type="number" min="0" value="${menge}" class="gDrinkQty border rounded w-16 text-center p-1" data-preis="${gd.preis}">
+        <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gDPlus">+1</button>
+      </div></td>
+      <td class="p-2 border gDSum text-right">${(gd.preis*menge).toFixed(2)} €</td>`;
+    const inp = tr.querySelector('.gDrinkQty');
+    inp.addEventListener('input', () => { tr.querySelector('.gDSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGDrinksSum(); });
+    tr.querySelector('.gDPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
+    tbody.appendChild(tr);
+  });
+  updateGDrinksSum();
+  document.getElementById('modalGuestDrinks').classList.remove('hidden');
+}
+window.qvOpenDrinks = qvOpenDrinks;
+
+function qvOpenFood(gameId, guestIdx) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const gst = g.gaeste[guestIdx]; if (!gst) return;
+
+  activeGuestRow = createQvProxy(gameId, guestIdx, 'food');
+
+  const tbody = document.getElementById('gFoodBody'); tbody.innerHTML = '';
+  const data  = JSON.parse(gst.essen || '{}');
+  guestFoodList.filter(x => !x.disabled).forEach(gf => {
+    const menge = data[gf.name] || 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="p-2 border">${esc(gf.name)}</td><td class="p-2 border text-right">${gf.preis.toFixed(2)} €</td>
+      <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
+        <input type="number" min="0" value="${menge}" class="gFoodQty border rounded w-16 text-center p-1" data-preis="${gf.preis}">
+        <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gFPlus">+1</button>
+      </div></td>
+      <td class="p-2 border gFSum text-right">${(gf.preis*menge).toFixed(2)} €</td>`;
+    const inp = tr.querySelector('.gFoodQty');
+    inp.addEventListener('input', () => { tr.querySelector('.gFSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGFoodSum(); });
+    tr.querySelector('.gFPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
+    tbody.appendChild(tr);
+  });
+  updateGFoodSum();
+  document.getElementById('modalGuestFood').classList.remove('hidden');
+}
+window.qvOpenFood = qvOpenFood;
+
+function qvOpenSettle(gameId, guestIdx) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const gst = g.gaeste[guestIdx]; if (!gst) return;
+
+  activeGuestRow = createQvProxy(gameId, guestIdx, 'settle');
+
+  const total = calcGuestTotal(gst, 'drink') + calcGuestTotal(gst, 'food');
+  let html = `<div class="bg-gray-50 p-3 rounded"><p><strong>Gast:</strong> ${esc(gst.name)}</p><p><strong>Gesamt:</strong> ${total.toFixed(2)} €</p>`;
+  const dr = JSON.parse(gst.getraenke||'{}');
+  if (Object.keys(dr).length) { html+='<p class="mt-2 font-semibold">Getränke:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(dr)){const a=guestDrinkList.find(x=>x.name===n); html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; }
+  const fo = JSON.parse(gst.essen||'{}');
+  if (Object.keys(fo).length) { html+='<p class="mt-2 font-semibold">Essen:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(fo)){const a=guestFoodList.find(x=>x.name===n);  html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; }
+  html += '</div>';
+  document.getElementById('gSettleContent').innerHTML = html;
+  document.getElementById('gTipInput').value = gst.tip || '0.00';
+  setupTipBtns();
+  document.getElementById('modalGuestSettle').classList.remove('hidden');
+}
+window.qvOpenSettle = qvOpenSettle;
+
+// Proxy-Objekt: ersetzt activeGuestRow (DOM-Row) für QuickView-Speicherung
+function createQvProxy(gameId, guestIdx, mode) {
+  // Wir nutzen ein einfaches Objekt mit denselben setAttribute/getAttribute-Methoden
+  const store = {};
+  const g = games.find(x => x.id === gameId);
+  if (g && g.gaeste[guestIdx]) {
+    store['data-drinks'] = g.gaeste[guestIdx].getraenke || '{}';
+    store['data-food']   = g.gaeste[guestIdx].essen     || '{}';
+    store['data-tip']    = g.gaeste[guestIdx].tip       || '0.00';
+    store['data-paid']   = g.gaeste[guestIdx].paid ? 'true' : 'false';
+  }
+  return {
+    _gameId: gameId,
+    _guestIdx: guestIdx,
+    _isQvProxy: true,
+    getAttribute(k)    { return store[k] ?? null; },
+    setAttribute(k, v) {
+      store[k] = v;
+      // Sofort in Firestore speichern
+      saveQvProxyToFirestore(gameId, guestIdx, store);
+    },
+    classList:   { add(){}, toggle(){} },
+    querySelector(){ return null; },
+    querySelectorAll(){ return []; },
+    removeAttribute(){},
+    // Für updateGuestRowTotal – wird hier nicht gebraucht
+  };
+}
+
+async function saveQvProxyToFirestore(gameId, guestIdx, store) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const gaeste = JSON.parse(JSON.stringify(g.gaeste || []));
+  if (!gaeste[guestIdx]) return;
+  if (store['data-drinks'] !== undefined) gaeste[guestIdx].getraenke = store['data-drinks'];
+  if (store['data-food']   !== undefined) gaeste[guestIdx].essen     = store['data-food'];
+  if (store['data-tip']    !== undefined) gaeste[guestIdx].tip       = store['data-tip'];
+  if (store['data-paid']   !== undefined) gaeste[guestIdx].paid      = store['data-paid'] === 'true';
+  // Status neu bestimmen
+  const allPaid = gaeste.every(gs => gs.paid);
+  const status  = allPaid ? 'ready' : 'draft';
+  try {
+    await fbUpdate('spiele', gameId, { gaeste, status });
+  } catch(e) { console.error('QvProxy save:', e); showToast('Fehler beim automatischen Speichern.', 'error'); }
+}
+window.saveQvProxyToFirestore = saveQvProxyToFirestore;
+
+// Finalisieren aus QuickView
+async function qvFinalizeGame(gameId) {
+  const g = games.find(x => x.id === gameId); if (!g) return;
+  const btn = document.querySelector(`[onclick="qvFinalizeGame('${gameId}')"]`);
+  if (btn) { btn.disabled=true; btn.textContent='Erstelle PDF…'; }
+
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  try {
+    const gaeste = g.gaeste || [];
+    const { jsPDF } = window.jspdf;
+    const pdoc = new jsPDF();
+    const tData = []; const dSum = {}, fSum = {}; let totAmt = 0, totTip = 0;
+    gaeste.forEach(gst => {
+      const dr = JSON.parse(gst.getraenke||'{}'); const fo = JSON.parse(gst.essen||'{}');
+      let ga = 0;
+      for (const [n,q] of Object.entries(dr)) { const a=guestDrinkList.find(x=>x.name===n); if(a){ga+=a.preis*q; dSum[n]=(dSum[n]||0)+q;} }
+      for (const [n,q] of Object.entries(fo)) { const a=guestFoodList.find(x=>x.name===n);  if(a){ga+=a.preis*q; fSum[n]=(fSum[n]||0)+q;} }
+      const tip = parseFloat(gst.tip||0); totAmt += ga; totTip += tip;
+      tData.push([gst.name,
+        Object.entries(dr).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
+        Object.entries(fo).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
+        ga.toFixed(2)+' €', tip.toFixed(2)+' €']);
+    });
+    tData.push(['SUMME',
+      Object.entries(dSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
+      Object.entries(fSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
+      totAmt.toFixed(2)+' €', totTip.toFixed(2)+' €']);
+    pdoc.setFontSize(16); pdoc.text(`Abrechnung: ${g.team} vs ${g.opponent}`, 10, 15);
+    pdoc.setFontSize(12); pdoc.text(`Datum: ${fDate(g.date)}`, 10, 25);
+    pdoc.autoTable({ head:[['Name','Getränke','Essen','Zwischensumme','Trinkgeld']], body:tData,
+      styles:{fontSize:9,cellPadding:2}, headStyles:{fillColor:[70,130,180],textColor:255}, startY:35,
+      alternateRowStyles:{fillColor:[245,245,245]},
+      didParseCell(d){ if(d.row.index===tData.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[220,220,220]; } }
+    });
+    pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`, 10, pdoc.lastAutoTable.finalY+10);
+    const pdfData = pdoc.output('datauristring');
+
+    await fbUpdate('spiele', gameId, {
+      status: 'finalized', finalizedAt: new Date().toISOString(),
+      pdfData, pdfCreatedAt: new Date().toISOString()
+    });
+    closeQuickView();
+    openPdfDataUri(pdfData);
+    showToast('Spiel final abgerechnet!');
+  } catch(e) {
+    console.error(e); showToast('Fehler beim Finalisieren.', 'error');
+    if (btn) { btn.disabled=false; btn.textContent='✓ Abrechnen'; }
+  }
+}
+window.qvFinalizeGame = qvFinalizeGame;
+
+// Hilfsfunktion: Gesamtbetrag für Gast (drink oder food)
+function calcGuestTotal(gst, type) {
+  let total = 0;
+  const data = JSON.parse(type === 'drink' ? (gst.getraenke||'{}') : (gst.essen||'{}'));
+  const list = type === 'drink' ? guestDrinkList : guestFoodList;
+  for (const [n, q] of Object.entries(data)) {
+    const art = list.find(x => x.name === n);
+    if (art) total += art.preis * q;
+  }
+  return total;
 }
 
 function showGamePDF(gameId) {
@@ -1447,29 +1848,16 @@ document.getElementById('btnNewGame').addEventListener('click', () => {
   editGameId = null; clearGameForm();
   document.getElementById('gDate').value = today();
   populateTeamSelect();
-  initGuestRows();
   document.getElementById('modalGame').classList.remove('hidden');
-  updateFinalizeBtn();
-  gameSnapshot = takeGameSnapshot();
 });
 document.getElementById('btnCloseGame').addEventListener('click', () => {
-  if (hasGameChanges()) {
-    confirmDiscard(() => {
-      gameSnapshot = null;
-      document.getElementById('modalGame').classList.add('hidden');
-      clearGameForm();
-    });
-  } else {
-    gameSnapshot = null;
-    document.getElementById('modalGame').classList.add('hidden');
-    clearGameForm();
-  }
+  document.getElementById('modalGame').classList.add('hidden');
+  clearGameForm();
 });
 function clearGameForm() {
   document.getElementById('gTeam').value     = '';
   document.getElementById('gOpponent').value = '';
   document.getElementById('gDate').value     = '';
-  document.querySelector('#guestTableBody').innerHTML = '';
 }
 function initGuestRows() {
   for (let i = 0; i < 4; i++) addGuestRow(true);
@@ -1500,7 +1888,8 @@ function addGuestRow(skipSort = false) {
 
   if (!skipSort) sortGuestRows();
 }
-document.getElementById('btnAddGuestRow').addEventListener('click', addGuestRow);
+const _btnAddGuestRow = document.getElementById('btnAddGuestRow');
+if (_btnAddGuestRow) _btnAddGuestRow.addEventListener('click', addGuestRow);
 
 function sortGuestRows() {
   const tbody = document.getElementById('guestTableBody');
@@ -1552,9 +1941,10 @@ document.getElementById('btnSaveGDrinks').addEventListener('click', () => {
     if (q > 0) data[nm] = q;
   });
   activeGuestRow.setAttribute('data-drinks', JSON.stringify(data));
-  updateGuestRowTotal(activeGuestRow);
+  if (!activeGuestRow._isQvProxy) updateGuestRowTotal(activeGuestRow);
   document.getElementById('modalGuestDrinks').classList.add('hidden');
-  activeGuestRow = null;
+  if (activeGuestRow._isQvProxy) { const id=activeGuestRow._gameId; activeGuestRow=null; renderQuickView(id); }
+  else activeGuestRow = null;
 });
 document.getElementById('btnCloseGDrinks').addEventListener('click', () => {
   if (hasGDrinksChanges()) {
@@ -1627,9 +2017,10 @@ document.getElementById('btnSaveGFood').addEventListener('click', () => {
     if (q > 0) data[nm] = q;
   });
   activeGuestRow.setAttribute('data-food', JSON.stringify(data));
-  updateGuestRowTotal(activeGuestRow);
+  if (!activeGuestRow._isQvProxy) updateGuestRowTotal(activeGuestRow);
   document.getElementById('modalGuestFood').classList.add('hidden');
-  activeGuestRow = null;
+  if (activeGuestRow._isQvProxy) { const id=activeGuestRow._gameId; activeGuestRow=null; renderQuickView(id); }
+  else activeGuestRow = null;
 });
 document.getElementById('btnCloseGFood').addEventListener('click', () => {
   if (hasGFoodChanges()) {
@@ -1677,6 +2068,16 @@ document.getElementById('btnGuestPaid').addEventListener('click', () => {
   const tip = parseFloat(document.getElementById('gTipInput').value) || 0;
   activeGuestRow.setAttribute('data-tip', tip.toFixed(2));
   activeGuestRow.setAttribute('data-paid', 'true');
+  document.getElementById('modalGuestSettle').classList.add('hidden');
+
+  if (activeGuestRow._isQvProxy) {
+    const id = activeGuestRow._gameId;
+    activeGuestRow = null;
+    // onSnapshot aktualisiert games[] und ruft renderQuickView via unsubGames auf
+    return;
+  }
+
+  // Legacy: DOM-Row (nur noch bei altem Modal-Flow nötig, bleibt als Fallback)
   activeGuestRow.classList.add('bg-green-100');
   activeGuestRow.querySelector('input').disabled = true;
   activeGuestRow.querySelector('input').classList.add('bg-gray-200');
@@ -1686,7 +2087,6 @@ document.getElementById('btnGuestPaid').addEventListener('click', () => {
   });
   const lastTd = activeGuestRow.querySelectorAll('td')[5];
   if (lastTd) lastTd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
-  document.getElementById('modalGuestSettle').classList.add('hidden');
   sortGuestRows();
   activeGuestRow = null;
   updateFinalizeBtn();
@@ -1694,15 +2094,8 @@ document.getElementById('btnGuestPaid').addEventListener('click', () => {
 document.getElementById('btnCloseGuestSettle').addEventListener('click', () => document.getElementById('modalGuestSettle').classList.add('hidden'));
 
 function updateFinalizeBtn() {
-  const rows   = [...document.querySelectorAll('#guestTableBody tr')];
-  const named  = rows.filter(r => r.querySelector('input[type="text"]')?.value.trim());
-  const allPaid = named.length > 0 && named.every(r => r.getAttribute('data-paid') === 'true');
   const btn = document.getElementById('btnFinalizeGame');
-  btn.disabled = !allPaid;
-  btn.classList.toggle('bg-blue-600',       allPaid);
-  btn.classList.toggle('hover:bg-blue-700', allPaid);
-  btn.classList.toggle('bg-gray-400',      !allPaid);
-  btn.classList.toggle('cursor-not-allowed',!allPaid);
+  if (!btn) return; // Element existiert nicht mehr im neuen Layout
 }
 
 function takeGameSnapshot() {
@@ -1759,127 +2152,31 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
   const opp  = document.getElementById('gOpponent').value;
   const date = document.getElementById('gDate').value;
   if (!team || !opp || !date) { showToast('Bitte Team, Gegner und Datum ausfüllen.', 'error'); return; }
-  const gaeste  = collectGaeste();
-  const allPaid = gaeste.length > 0 && gaeste.every(g => g.paid);
-  const gData   = { team, opponent:opp, date, gaeste, status: allPaid ? 'ready' : 'draft' };
+
   const btn = document.getElementById('btnSaveGame');
   btn.disabled = true;
   btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Speichern…';
   try {
-    if (editGameId) { await fbUpdate('spiele', editGameId, gData); }
-    else            { await fbAdd('spiele', gData); }
+    const newId = await fbAdd('spiele', { team, opponent:opp, date, gaeste:[], status:'draft' });
     editGameId = null; gameSnapshot = null;
     document.getElementById('modalGame').classList.add('hidden');
     clearGameForm();
-    showToast(`Spiel ${allPaid ? 'bereit' : 'als Entwurf'} gespeichert!`);
+    showToast('Heimspiel angelegt!');
+    // QuickView direkt öffnen – games[] wird per onSnapshot aktualisiert
+    // Kurze Wartezeit bis Snapshot zurückkommt
+    setTimeout(() => openQuickView(newId), 400);
   } catch(e) {
-    console.error(e); showToast('Fehler beim Speichern des Spiels.', 'error');
+    console.error(e); showToast('Fehler beim Speichern.', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Speichern';
+    btn.innerHTML = 'Spiel anlegen';
   }
 });
 
-document.getElementById('btnFinalizeGame').addEventListener('click', async () => {
-  const team = document.getElementById('gTeam').value;
-  const opp  = document.getElementById('gOpponent').value;
-  const date = document.getElementById('gDate').value;
-  if (!team || !opp || !date) { showToast('Bitte alle Felder ausfüllen.', 'error'); return; }
-
-  const btn = document.getElementById('btnFinalizeGame');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Erstelle PDF…';
-
-  // PDF-Generierung in nächsten Tick → UI zeigt Spinner bevor JS-Thread blockiert
-  await new Promise(resolve => setTimeout(resolve, 0));
-
-  try {
-    const gaeste = collectGaeste();
-    const gData  = { team, opponent:opp, date, gaeste, status:'finalized', finalizedAt: new Date().toISOString() };
-
-    const { jsPDF } = window.jspdf;
-    const pdoc = new jsPDF();
-    const tData = []; const dSum = {}, fSum = {}; let totAmt = 0, totTip = 0;
-    gaeste.forEach(g => {
-      const dr = JSON.parse(g.getraenke||'{}'); const fo = JSON.parse(g.essen||'{}');
-      let ga = 0;
-      for (const [n,q] of Object.entries(dr)) { const a=guestDrinkList.find(x=>x.name===n); if(a){ga+=a.preis*q; dSum[n]=(dSum[n]||0)+q;} }
-      for (const [n,q] of Object.entries(fo)) { const a=guestFoodList.find(x=>x.name===n);  if(a){ga+=a.preis*q; fSum[n]=(fSum[n]||0)+q;} }
-      const tip = parseFloat(g.tip||0); totAmt += ga; totTip += tip;
-      tData.push([g.name,
-        Object.entries(dr).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
-        Object.entries(fo).filter(([,v])=>v>0).map(([n,v])=>`${n}(${v})`).join(', ')||'–',
-        ga.toFixed(2)+' €', tip.toFixed(2)+' €']);
-    });
-    tData.push(['SUMME',
-      Object.entries(dSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
-      Object.entries(fSum).map(([k,v])=>`${k}(${v})`).join(', ')||'–',
-      totAmt.toFixed(2)+' €', totTip.toFixed(2)+' €']);
-    pdoc.setFontSize(16); pdoc.text(`Abrechnung: ${team} vs ${opp}`, 10, 15);
-    pdoc.setFontSize(12); pdoc.text(`Datum: ${fDate(date)}`, 10, 25);
-    pdoc.autoTable({ head:[['Name','Getränke','Essen','Zwischensumme','Trinkgeld']], body:tData,
-      styles:{fontSize:9,cellPadding:2}, headStyles:{fillColor:[70,130,180],textColor:255}, startY:35,
-      alternateRowStyles:{fillColor:[245,245,245]},
-      didParseCell(d){ if(d.row.index===tData.length-1){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[220,220,220]; } }
-    });
-    pdoc.setFontSize(12); pdoc.text(`Gesamtumsatz: ${(totAmt+totTip).toFixed(2)} €`, 10, pdoc.lastAutoTable.finalY+10);
-    const pdfData = pdoc.output('datauristring');
-    gData.pdfData = pdfData; gData.pdfCreatedAt = new Date().toISOString();
-
-    btn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin align-middle mr-1"></span>Speichern…';
-
-    if (editGameId) { await fbUpdate('spiele', editGameId, gData); }
-    else            { await fbAdd('spiele', gData); }
-
-    editGameId = null; gameSnapshot = null;
-    document.getElementById('modalGame').classList.add('hidden');
-    clearGameForm();
-    openPdfDataUri(pdfData);
-    showToast('Spiel final abgerechnet!');
-  } catch(e) {
-    console.error(e); showToast('Fehler beim Finalisieren.', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = 'Spiel abrechnen';
-  }
-});
 
 function editGame(gameId) {
-  const g = games.find(x => x.id === gameId);
-  if (!g) { showToast('Spiel nicht gefunden.', 'error'); return; }
-  if (g.status === 'finalized') { showToast('Finalisierte Spiele können nicht bearbeitet werden.', 'warning'); return; }
-  editGameId = gameId;
-  clearGameForm();
-  populateTeamSelect();
-  document.getElementById('gTeam').value     = g.team     || '';
-  document.getElementById('gOpponent').value = g.opponent || '';
-  document.getElementById('gDate').value     = g.date     || '';
-  const tbody = document.getElementById('guestTableBody');
-  if (g.gaeste && g.gaeste.length) {
-    g.gaeste.forEach(gst => {
-      addGuestRow(true);
-      const row = tbody.lastChild;
-      row.querySelector('input[type="text"]').value = gst.name || '';
-      row.setAttribute('data-drinks', gst.getraenke || '{}');
-      row.setAttribute('data-food',   gst.essen     || '{}');
-      row.setAttribute('data-tip',    gst.tip       || '0.00');
-      updateGuestRowTotal(row);
-      if (gst.paid) {
-        row.setAttribute('data-paid', 'true');
-        row.classList.add('bg-green-100');
-        row.querySelector('input[type="text"]').disabled = true;
-        row.querySelector('input[type="text"]').classList.add('bg-gray-200');
-        ['btnGDrinks','btnGFood','btnGSettle'].forEach(cls => {
-          const b = row.querySelector('.'+cls); if (b) { b.disabled=true; b.classList.add('bg-gray-400','cursor-not-allowed'); }
-        });
-        const ltd = row.querySelectorAll('td')[5]; if (ltd) ltd.innerHTML = '<span class="text-green-600 text-xl">✓</span>';
-      }
-    });
-    sortGuestRows();
-  } else { initGuestRows(); }
-  document.getElementById('modalGame').classList.remove('hidden');
-  updateFinalizeBtn();
-  gameSnapshot = takeGameSnapshot();
+  // Wird jetzt über QuickView gehandelt – direkt öffnen
+  openQuickView(gameId);
 }
 window.editGame = editGame;
 
@@ -1888,8 +2185,11 @@ function deleteGame(gameId) {
   if (!g) { showToast('Spiel nicht gefunden.', 'error'); return; }
   if (g.status === 'finalized') { showToast('Finalisierte Spiele können nicht gelöscht werden.', 'warning'); return; }
   showConfirm('Spiel wirklich löschen?', async () => {
-    try { await fbDelete('spiele', gameId); showToast('Spiel gelöscht.'); }
-    catch(e) { console.error(e); showToast('Fehler beim Löschen.', 'error'); }
+    try {
+      if (quickViewGameId === gameId) closeQuickView();
+      await fbDelete('spiele', gameId);
+      showToast('Spiel gelöscht.');
+    } catch(e) { console.error(e); showToast('Fehler beim Löschen.', 'error'); }
   });
 }
 window.deleteGame = deleteGame;
@@ -2278,11 +2578,10 @@ document.addEventListener('keydown', e => {
   } else if (!document.getElementById('modalBooking').classList.contains('hidden')) {
     document.getElementById('modalBooking').classList.add('hidden');
   }
-  if (!document.getElementById('modalGame').classList.contains('hidden') && hasGameChanges()) {
-    confirmDiscard(() => { gameSnapshot = null; document.getElementById('modalGame').classList.add('hidden'); });
-  } else if (!document.getElementById('modalGame').classList.contains('hidden')) {
-    gameSnapshot = null; document.getElementById('modalGame').classList.add('hidden');
-  }
+  if (!document.getElementById('modalGame').classList.contains('hidden')) {
+  document.getElementById('modalGame').classList.add('hidden');
+  clearGameForm();
+}
   if (!document.getElementById('modalGuestDrinks').classList.contains('hidden') && hasGDrinksChanges()) {
     confirmDiscard(() => document.getElementById('modalGuestDrinks').classList.add('hidden'));
   } else if (!document.getElementById('modalGuestDrinks').classList.contains('hidden')) {
@@ -2312,17 +2611,8 @@ document.getElementById('modalBooking').addEventListener('click', e => {
 });
 document.getElementById('modalGame').addEventListener('click', e => {
   if (e.target !== document.getElementById('modalGame')) return;
-  if (hasGameChanges()) {
-    confirmDiscard(() => {
-      gameSnapshot = null;
-      document.getElementById('modalGame').classList.add('hidden');
-      clearGameForm();
-    });
-  } else {
-    gameSnapshot = null;
-    document.getElementById('modalGame').classList.add('hidden');
-    clearGameForm();
-  }
+  document.getElementById('modalGame').classList.add('hidden');
+  clearGameForm();
 });
 document.getElementById('modalGuestDrinks').addEventListener('click', e => {
   if (e.target !== document.getElementById('modalGuestDrinks')) return;
