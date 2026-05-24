@@ -1640,8 +1640,9 @@ function renderQuickView(gameId) {
       const foTotal = calcGuestTotal(gst, 'food');
       const total   = drTotal + foTotal;
       const tipVal  = parseFloat(gst.tip || 0);
+	  const zebraClass = si % 2 === 0 ? 'bg-white' : 'bg-gray-100';
       guestRows += `
-        <tr class="${gst.paid ? 'bg-green-50' : ''}">
+        <tr class="${gst.paid ? 'bg-green-50' : zebraClass}">
           <td class="border p-2 text-sm font-medium">${esc(gst.name||'')}</td>
           <td class="border p-2 text-sm text-right">${drTotal.toFixed(2)} €</td>
           <td class="border p-2 text-sm text-right">${foTotal.toFixed(2)} €</td>
