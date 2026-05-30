@@ -1349,7 +1349,7 @@ function buildBkGrids() {
           <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
-      <td class="border p-2 text-right" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
+      <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>
     fBody.appendChild(tr);
   });
 }
@@ -2640,7 +2640,7 @@ function showGameWeekDetails(key) {
   let html = `<h3 class="font-semibold mb-2">Spiele:</h3><div class="bg-gray-50 rounded p-3 mb-3">`;
   d.spiele.forEach(s => { html += `<div class="mb-1"><strong>${esc(s.team)}</strong> vs <strong>${esc(s.opponent)}</strong> <span class="text-gray-400 text-sm">(${fDate(s.date)})</span></div>`; });
   html += '</div>';
-  if (Object.keys(d.drinksDetail).length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.drinksDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  if (Object.keys(d.drinksDetail).length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:340px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.drinksDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
   if (Object.keys(d.foodDetail).length)   { html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.foodDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
   document.getElementById('wkDetailContent').innerHTML = html;
   document.getElementById('modalWeekDetails').classList.remove('hidden');
