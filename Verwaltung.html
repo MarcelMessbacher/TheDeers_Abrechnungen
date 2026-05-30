@@ -1341,7 +1341,7 @@ function buildBkGrids() {
     tr.id = `bkrow-${id}`;
     tr.innerHTML = `
       <td class="border p-2">${esc(art.name)}</td>
-      <td class="border p-2 text-right">${fEuro(art.memberPrice)}</td>
+      <td class="border p-2 text-right no-wrap">${fEuro(art.memberPrice)}</td>
       <td class="border p-2 text-center">
         <div class="flex items-center justify-center gap-2">
           <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
