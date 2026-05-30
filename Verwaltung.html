@@ -1331,7 +1331,7 @@ function buildBkGrids() {
         </div>
       </td>
       <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
-    dBody.appendChild(tr);
+    dBody.appendChild(tr);	
   });
 
   ARTICLES.filter(a => a.type === 'food' && !a.inactive).forEach(art => {
@@ -1349,7 +1349,7 @@ function buildBkGrids() {
           <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
-      <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>
+      <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
     fBody.appendChild(tr);
   });
 }
