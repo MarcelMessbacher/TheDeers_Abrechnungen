@@ -768,8 +768,8 @@ async function loadConfig() {
   TEAMS.sort((a, b) => (a.name||'').localeCompare(b.name||'', 'de'));
 
   // Abgeleitete Gäste-Listen aktualisieren
-  guestDrinkList = ARTICLES.filter(a => a.type === 'drink').map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
-  guestFoodList  = ARTICLES.filter(a => a.type === 'food' ).map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
+	 guestDrinkList = ARTICLES.filter(a => a.type === 'drink' && !a.inactive).map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
+     guestFoodList  = ARTICLES.filter(a => a.type === 'food'  && !a.inactive).map(a => ({ name: a.name, preis: a.guestPrice, disabled: !!a.guestDisabled }));
 
   // Team-Dropdown befüllen
   populateTeamSelect();
@@ -1219,7 +1219,7 @@ function renderMembers() {
 function buildPrefDrinkOpts(sel='') {
   const s = document.getElementById('inPrefDrink');
   s.innerHTML = '<option value="">– kein –</option>';
-  ARTICLES.filter(a => a.type === 'drink').forEach(a => {
+  ARTICLES.filter(a => a.type === 'drink' && !a.inactive).forEach(a => {
     const o = document.createElement('option');
     o.value = a.name; o.textContent = `${a.name} (${fEuro(a.memberPrice)})`;
     if (a.name === sel) o.selected = true;
@@ -1315,7 +1315,7 @@ function buildBkGrids() {
 	dBody.innerHTML = '<tr><td colspan="4" class="p-2 text-left text-sm font-bold bg-gray-200 border-l-4 border-gray-500" style="color:#374151">🥛 Getränke</td></tr>';
 	fBody.innerHTML = '<tr><td colspan="4" class="p-2 text-left text-sm font-bold bg-gray-200 border-l-4 border-gray-500 mt-2" style="color:#374151">🍴 Essen</td></tr>';
 
-  ARTICLES.filter(a => a.type === 'drink').forEach(art => {
+  ARTICLES.filter(a => a.type === 'drink' && !a.inactive).forEach(art => {
     const id  = art.firestoreId || art.id;
     const qty = bookingQty[id] || 0;
     const tr  = document.createElement('tr');
@@ -1334,7 +1334,7 @@ function buildBkGrids() {
     dBody.appendChild(tr);
   });
 
-  ARTICLES.filter(a => a.type === 'food').forEach(art => {
+  ARTICLES.filter(a => a.type === 'food' && !a.inactive).forEach(art => {
     const id  = art.firestoreId || art.id;
     const qty = bookingQty[id] || 0;
     const tr  = document.createElement('tr');

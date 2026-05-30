@@ -145,7 +145,8 @@
                   <th class="p-2 border text-right">Mitglieder VK (€)</th>
                   <th class="p-2 border text-right">Gast VK (€)</th>
                   <th class="p-2 border text-center">Gast deaktiviert</th>
-				  <th class="p-2 border text-center">In Abrechnung</th>
+					<th class="p-2 border text-center">In Abrechnung</th>
+					<th class="p-2 border text-center">Aktiv</th>
                   <th class="p-2 border text-center">Aktion</th>
                 </tr>
               </thead>
@@ -158,7 +159,10 @@
                     <td class="p-2 border text-right">${a.guestPrice.toFixed(2)}</td>
                     <td class="p-2 border text-center">${a.guestDisabled ? '✓' : '–'}</td>
 					<td class="p-2 border text-center">${a.excludeFromReport ? '–' : '✓'}</td>
-                    <td class="p-2 border text-center">
+					<td class="p-2 border text-center">
+					  <button data-toggle-art="${a.firestoreId}" class="text-base hover:scale-110 transition-transform" title="${a.inactive ? 'Aktivieren' : 'Deaktivieren'}">${a.inactive ? '🔴' : '🟢'}</button>
+					</td>
+					<td class="p-2 border text-center">
                       <button data-edit-art="${a.firestoreId}" class="text-base mr-1 hover:scale-110 transition-transform">✏️</button>
                       <button data-del-art="${a.firestoreId}" class="text-base text-red-500 hover:scale-110 transition-transform">🗑️</button>
                     </td>
@@ -175,6 +179,17 @@
       });
       document.querySelectorAll('[data-del-art]').forEach(btn => {
         btn.addEventListener('click', () => confirmDelete('Artikel', () => deleteArticle(btn.dataset.delArt)));
+      });
+      document.querySelectorAll('[data-toggle-art]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const a = articles.find(x => x.firestoreId === btn.dataset.toggleArt);
+          if (!a) return;
+          try {
+            await updateDoc(doc(db, 'artikel', a.firestoreId), { inactive: !a.inactive, updatedAt: new Date().toISOString() });
+            await loadArticles();
+            showToast(a.inactive ? 'Artikel aktiviert.' : 'Artikel deaktiviert.');
+          } catch(e) { console.error(e); showToast('Fehler beim Speichern.', 'error'); }
+        });
       });
     }
 
