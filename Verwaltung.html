@@ -226,6 +226,21 @@
 .dark #syncIndicator { background: rgba(31,41,55,0.95) !important; border-color: #374151 !important; color: #d1d5db; }
 .dark .tab-btn.active { border-color: #f9fafb !important; color: #f9fafb !important; }
 .dark .tab-btn:not(.active) { color: #6b7280 !important; }
+.dark #bkDrinksBody tr:first-child td,
+.dark #bkFoodBody tr:first-child td {
+  background-color: #374151 !important;
+  color: #f3f4f6 !important;
+  border-left-color: #9ca3af !important;
+}
+.dark tr.hover\:bg-gray-50:hover td {
+  background-color: #374151 !important;
+  color: #f3f4f6 !important;
+}
+.dark .bg-red-50 { background-color: #3b1a1a !important; }
+.dark .border-red-200 { border-color: #7f1d1d !important; }
+.dark .bg-blue-50 { background-color: #1a2744 !important; }
+.dark .border-blue-200 { border-color: #1e3a5f !important; }
+.dark .text-blue-800 { color: #93c5fd !important; }
   </style>
 </head>
 <body class="bg-gray-100 p-3 sm:p-6 transition-colors duration-200">
@@ -429,17 +444,29 @@
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchung erfassen</h2>
       <p id="bookingLabel" class="text-sm text-gray-500 mb-4"></p>
-      <div class="flex gap-6 border-b mb-4">
-        <button class="tab-btn active pb-2 text-sm" data-tab="bkDrinks" onclick="switchBkTab('bkDrinks')">Getränke</button>
-        <button class="tab-btn pb-2 text-sm"        data-tab="bkFood"   onclick="switchBkTab('bkFood')">Essen</button>
-      </div>
-      <div id="tabBkDrinks"><div class="art-grid" id="bkDrinksGrid"></div></div>
-      <div id="tabBkFood" class="hidden"><div class="art-grid" id="bkFoodGrid"></div></div>
-      <div class="mt-4 p-3 bg-gray-50 rounded text-sm">
-        <div class="flex justify-between mb-1"><span class="text-gray-600">Getränke:</span><span id="bkSumDrinks" class="font-semibold">0,00 €</span></div>
-        <div class="flex justify-between mb-1"><span class="text-gray-600">Essen:</span><span id="bkSumFood" class="font-semibold">0,00 €</span></div>
-        <div class="flex justify-between font-bold border-t pt-2 mt-1"><span>Gesamt:</span><span id="bkTotal" class="text-lg">0,00 €</span></div>
-      </div>
+      <div class="overflow-x-auto">
+	  <table class="w-full text-sm border-collapse mb-3" style="min-width:360px">
+		<thead class="bg-gray-100">
+		  <tr>
+			<th class="border p-2 text-left">Artikel</th>
+			<th class="border p-2 text-right">Preis</th>
+			<th class="border p-2 text-center">Anzahl</th>
+			<th class="border p-2 text-right">Summe</th>
+		  </tr>
+		</thead>
+		<tbody id="bkDrinksBody">
+		  <tr><td colspan="4" class="p-2 text-center text-gray-400 text-xs font-semibold bg-gray-50">🥛 Getränke</td></tr>
+		</tbody>
+		<tbody id="bkFoodBody">
+		  <tr><td colspan="4" class="p-2 text-center text-gray-400 text-xs font-semibold bg-gray-50">🍴 Essen</td></tr>
+		</tbody>
+	  </table>
+	</div>
+	<div class="mt-2 p-3 bg-gray-50 rounded text-sm">
+	  <div class="flex justify-between mb-1"><span class="text-gray-600">Getränke:</span><span id="bkSumDrinks" class="font-semibold">0,00 €</span></div>
+	  <div class="flex justify-between mb-1"><span class="text-gray-600">Essen:</span><span id="bkSumFood" class="font-semibold">0,00 €</span></div>
+	  <div class="flex justify-between font-bold border-t pt-2 mt-1"><span>Gesamt:</span><span id="bkTotal" class="text-lg">0,00 €</span></div>
+	</div>
       <div class="mt-4">
         <label class="block text-sm font-medium mb-1">Datum</label>
         <input type="date" id="bkDate" class="border rounded w-48 p-2">
@@ -1257,38 +1284,64 @@ function openBookingModal(memberId) {
   bookingMemberId = memberId; bookingQty = {};
   document.getElementById('bookingLabel').textContent = `Buchung für: ${memberDisplayName(m)}`;
   const di = document.getElementById('bkDate'); di.value = today(); di.min = today();
-  buildBkGrids(); updateBkSums(); switchBkTab('bkDrinks');
+  buildBkGrids(); updateBkSums();
   document.getElementById('modalBooking').classList.remove('hidden');
 }
 window.openBookingModal = openBookingModal;
 
 function buildBkGrids() {
-  buildArtGrid('bkDrinksGrid', 'drink', bookingQty, 'bk', changeBkQty);
-  buildArtGrid('bkFoodGrid',   'food',  bookingQty, 'bk', changeBkQty);
-}
-function buildArtGrid(containerId, type, qtyMap, prefix, changeFn) {
-  const c = document.getElementById(containerId); c.innerHTML = '';
-  ARTICLES.filter(a => a.type === type).forEach(art => {
-    const qty  = qtyMap[art.firestoreId||art.id] || 0;
-    const card = document.createElement('div');
-    card.className = `art-card ${qty > 0 ? 'selected' : ''}`;
-    card.id = `${prefix}card-${art.firestoreId||art.id}`;
-    card.innerHTML = `
-      <div class="text-sm font-semibold leading-tight">${esc(art.name)}</div>
-      <div class="text-xs text-gray-500 mt-0.5">${fEuro(art.memberPrice)}</div>
-      <div class="qty-ctrl">
-        <button class="qbtn" onclick="${changeFn.name}('${art.firestoreId||art.id}',-1)">−</button>
-        <span class="qdsp" id="${prefix}qty-${art.firestoreId||art.id}">${qty}</span>
-        <button class="qbtn" onclick="${changeFn.name}('${art.firestoreId||art.id}',1)">+</button>
-      </div>`;
-    c.appendChild(card);
+  const dBody = document.getElementById('bkDrinksBody');
+  const fBody = document.getElementById('bkFoodBody');
+	dBody.innerHTML = '<tr><td colspan="4" class="p-2 text-left text-sm font-bold bg-gray-200 border-l-4 border-gray-500" style="color:#374151">🥛 Getränke</td></tr>';
+	fBody.innerHTML = '<tr><td colspan="4" class="p-2 text-left text-sm font-bold bg-gray-200 border-l-4 border-gray-500 mt-2" style="color:#374151">🍴 Essen</td></tr>';
+
+  ARTICLES.filter(a => a.type === 'drink').forEach(art => {
+    const id  = art.firestoreId || art.id;
+    const qty = bookingQty[id] || 0;
+    const tr  = document.createElement('tr');
+    tr.id = `bkrow-${id}`;
+    tr.innerHTML = `
+      <td class="border p-2">${esc(art.name)}</td>
+      <td class="border p-2 text-right">${fEuro(art.memberPrice)}</td>
+      <td class="border p-2 text-center">
+        <div class="flex items-center justify-center gap-2">
+          <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
+          <span class="qdsp" id="bkqty-${id}">${qty}</span>
+          <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
+        </div>
+      </td>
+      <td class="border p-2 text-right" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
+    dBody.appendChild(tr);
+  });
+
+  ARTICLES.filter(a => a.type === 'food').forEach(art => {
+    const id  = art.firestoreId || art.id;
+    const qty = bookingQty[id] || 0;
+    const tr  = document.createElement('tr');
+    tr.id = `bkrow-${id}`;
+    tr.innerHTML = `
+      <td class="border p-2">${esc(art.name)}</td>
+      <td class="border p-2 text-right">${fEuro(art.memberPrice)}</td>
+      <td class="border p-2 text-center">
+        <div class="flex items-center justify-center gap-2">
+          <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
+          <span class="qdsp" id="bkqty-${id}">${qty}</span>
+          <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
+        </div>
+      </td>
+      <td class="border p-2 text-right" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
+    fBody.appendChild(tr);
   });
 }
 
 function changeBkQty(id, d) {
   bookingQty[id] = Math.max(0, (bookingQty[id]||0) + d);
-  document.getElementById(`bkqty-${id}`).textContent = bookingQty[id];
-  document.getElementById(`bkcard-${id}`).classList.toggle('selected', bookingQty[id] > 0);
+  const qty = bookingQty[id];
+  document.getElementById(`bkqty-${id}`).textContent = qty;
+  const art = ARTICLES.find(a => (a.firestoreId||a.id) === id);
+  if (art) document.getElementById(`bksum-${id}`).textContent = fEuro(art.memberPrice * qty);
+  const row = document.getElementById(`bkrow-${id}`);
+  if (row) row.style.fontWeight = qty > 0 ? 'bold' : '';
   updateBkSums();
 }
 window.changeBkQty = changeBkQty;
@@ -1306,12 +1359,6 @@ function updateBkSums() {
 function hasBkChanges() {
   return ARTICLES.some(a => (bookingQty[a.firestoreId || a.id] || 0) > 0);
 }
-function switchBkTab(tab) {
-  document.querySelectorAll('#modalBooking .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.getElementById('tabBkDrinks').classList.toggle('hidden', tab !== 'bkDrinks');
-  document.getElementById('tabBkFood').classList.toggle('hidden',   tab !== 'bkFood');
-}
-window.switchBkTab = switchBkTab;
 
 document.getElementById('btnCancelBooking').addEventListener('click', () => {
   if (hasBkChanges()) {
@@ -1918,7 +1965,12 @@ function qvOpenSettle(gameId, guestIdx) {
   activeGuestRow = createQvProxy(gameId, guestIdx, 'settle');
 
   const total = calcGuestTotal(gst, 'drink') + calcGuestTotal(gst, 'food');
-  let html = `<div class="bg-gray-50 p-3 rounded"><p><strong>Gast:</strong> ${esc(gst.name)}</p><p><strong>Gesamt:</strong> ${total.toFixed(2)} €</p>`;
+  let html = `<div class="bg-gray-50 p-3 rounded mb-3">
+	  <p class="text-sm text-gray-600 mb-1">Gast: <strong>${esc(gst.name)}</strong></p>
+	  <div class="bg-red-50 border border-red-200 rounded p-3 mt-2">
+		<p class="text-sm text-gray-600">Offener Betrag:</p>
+		<p class="text-2xl font-bold text-red-600">${total.toFixed(2)} €</p>
+	  </div>`;
   const dr = JSON.parse(gst.getraenke||'{}');
   if (Object.keys(dr).length) { html+='<p class="mt-2 font-semibold">Getränke:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(dr)){const a=guestDrinkList.find(x=>x.name===n); html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; }
   const fo = JSON.parse(gst.essen||'{}');
@@ -2147,6 +2199,8 @@ document.getElementById('btnSaveGDrinks').addEventListener('click', () => {
   activeGuestRow.setAttribute('data-drinks', JSON.stringify(data));
   if (!activeGuestRow._isQvProxy) updateGuestRowTotal(activeGuestRow);
   document.getElementById('modalGuestDrinks').classList.add('hidden');
+  const total = Object.entries(data).reduce((s,[n,q]) => { const a=guestDrinkList.find(x=>x.name===n); return s+(a?a.preis*q:0); }, 0);
+  if (Object.keys(data).length) showToast(`Getränke gespeichert: ${fEuro(total)}`);
   if (activeGuestRow._isQvProxy) { const id=activeGuestRow._gameId; activeGuestRow=null; renderQuickView(id); }
   else activeGuestRow = null;
 });
@@ -2223,6 +2277,8 @@ document.getElementById('btnSaveGFood').addEventListener('click', () => {
   activeGuestRow.setAttribute('data-food', JSON.stringify(data));
   if (!activeGuestRow._isQvProxy) updateGuestRowTotal(activeGuestRow);
   document.getElementById('modalGuestFood').classList.add('hidden');
+  const total = Object.entries(data).reduce((s,[n,q]) => { const a=guestFoodList.find(x=>x.name===n); return s+(a?a.preis*q:0); }, 0);
+  if (Object.keys(data).length) showToast(`Essen gespeichert: ${fEuro(total)}`);
   if (activeGuestRow._isQvProxy) { const id=activeGuestRow._gameId; activeGuestRow=null; renderQuickView(id); }
   else activeGuestRow = null;
 });
