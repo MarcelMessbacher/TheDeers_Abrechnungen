@@ -6,6 +6,9 @@
   <title>Verwaltung The Deers – TSV Hirschaid</title>
   <link rel="icon" type="image/svg" href="The Deers Logo nur Hirsch.svg">
   <script src="https://cdn.tailwindcss.com"></script>
+	<script>
+	  tailwind.config = { darkMode: 'class' }
+	</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
   <script type="module">
@@ -185,14 +188,56 @@
   border-left: 4px solid #2563eb;
   background: #eff6ff !important;
 }
+
+/* Dark Mode */
+.dark body { background-color: #111827; color: #f9fafb; }
+.dark .bg-white { background-color: #1f2937 !important; }
+.dark .bg-gray-100 { background-color: #111827 !important; }
+.dark .bg-gray-50  { background-color: #1f2937 !important; }
+.dark .bg-gray-200 { background-color: #374151 !important; }
+.dark .bg-gray-300 { background-color: #4b5563 !important; }
+.dark .shadow { box-shadow: 0 1px 3px rgba(0,0,0,.5) !important; }
+.dark .border  { border-color: #374151 !important; }
+.dark .border-b { border-color: #374151 !important; }
+.dark .text-gray-800 { color: #f3f4f6 !important; }
+.dark .text-gray-700 { color: #d1d5db !important; }
+.dark .text-gray-600 { color: #9ca3af !important; }
+.dark .text-gray-500 { color: #6b7280 !important; }
+.dark .text-gray-400 { color: #4b5563 !important; }
+.dark input, .dark select, .dark textarea {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+  border-color: #4b5563 !important;
+}
+.dark .art-card { background-color: #1f2937 !important; border-color: #374151 !important; }
+.dark .art-card:hover { background-color: #374151 !important; }
+.dark .art-card.selected { background-color: #166534 !important; border-color: #16a34a !important; }
+.dark .qbtn { background-color: #374151 !important; border-color: #4b5563 !important; color: #f9fafb !important; }
+.dark .inactive-row { background-color: #1f2937 !important; }
+.dark .login-wrap { background-color: #111827; }
+.dark .login-box { background-color: #1f2937 !important; }
+.dark .linput { background-color: #374151 !important; border-color: #4b5563 !important; color: #f9fafb !important; }
+.dark .game-list-item { background-color: #1f2937 !important; }
+.dark .game-list-item.selected { background-color: #1e3a5f !important; border-color: #3b82f6 !important; }
+.dark #games-quickview-inner { background-color: #1f2937 !important; }
+.dark .modal-bg::before { background: rgba(17,24,39,.92) !important; }
+.dark tr[data-paid-row="true"] td { background-color: #1a3d2b !important; }
+.dark tr[data-paid-row="false"] td { background-color: #1f2937 !important; }
+.dark #syncIndicator { background: rgba(31,41,55,0.95) !important; border-color: #374151 !important; color: #d1d5db; }
+.dark .tab-btn.active { border-color: #f9fafb !important; color: #f9fafb !important; }
+.dark .tab-btn:not(.active) { color: #6b7280 !important; }
   </style>
 </head>
-<body class="bg-gray-100 p-3 sm:p-6">
+<body class="bg-gray-100 p-3 sm:p-6 transition-colors duration-200">
 
 <div id="syncIndicator" class="hidden">
   <div id="syncDot"></div>
   <span id="syncText">Verbunden</span>
 </div>
+
+<button id="btnDarkMode" onclick="toggleDarkMode()"
+  class="fixed top-2 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
+  title="Dark Mode umschalten">🌙</button>
 
 <!-- ═══════════ LOGIN ═══════════ -->
 <div id="loginPage" class="login-wrap">
@@ -230,11 +275,11 @@
 
   <nav class="mb-6">
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <button id="btn-members"  onclick="showPage('members')"  class="nav-btn bg-gray-400 text-white px-4 py-3 rounded font-bold hover:bg-gray-500 text-sm sm:text-base">Mitglieder</button>
-      <button id="btn-games"    onclick="showPage('games')"    class="nav-btn bg-gray-300 text-white px-4 py-3 rounded font-bold hover:bg-gray-400 text-sm sm:text-base">Heimspiele</button>
-      <button id="btn-reports"  onclick="showPage('reports')"  class="nav-btn bg-gray-300 text-white px-4 py-3 rounded font-bold hover:bg-gray-400 text-sm sm:text-base">Auswertungen</button>
-      <button onclick="doLogout()" class="nav-btn bg-red-500 text-white px-4 py-3 rounded font-bold hover:bg-red-600 text-sm sm:text-base">Abmelden</button>
-    </div>
+	  <button id="btn-members"  onclick="showPage('members')"  class="nav-btn bg-gray-400 text-white px-4 py-3 rounded font-bold hover:bg-gray-500 text-sm sm:text-base">Mitglieder</button>
+	  <button id="btn-games"    onclick="showPage('games')"    class="nav-btn bg-gray-300 text-white px-4 py-3 rounded font-bold hover:bg-gray-400 text-sm sm:text-base">Heimspiele</button>
+	  <button id="btn-reports"  onclick="showPage('reports')"  class="nav-btn bg-gray-300 text-white px-4 py-3 rounded font-bold hover:bg-gray-400 text-sm sm:text-base">Auswertungen</button>
+	  <button onclick="doLogout()" class="nav-btn bg-red-500 text-white px-4 py-3 rounded font-bold hover:bg-red-600 text-sm sm:text-base">Abmelden</button>
+	</div>
   </nav>
 
   <!-- ═══════════ SEITE: MITGLIEDER ═══════════ -->
@@ -1022,6 +1067,30 @@ async function doLogout() {
 window.doLogout = doLogout;
 
 // ══════════════════════════════════════════════════════════════
+// DARK MODE
+// ══════════════════════════════════════════════════════════════
+function toggleDarkMode() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  localStorage.setItem('darkMode', isDark ? '1' : '0');
+  document.getElementById('btnDarkMode').textContent = isDark ? '☀️' : '🌙';
+}
+window.toggleDarkMode = toggleDarkMode;
+
+// Beim Laden gespeicherten Zustand wiederherstellen
+(function() {
+  const saved = localStorage.getItem('darkMode');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (saved === '1' || (saved === null && prefersDark)) {
+    document.documentElement.classList.add('dark');
+    // Button-Text wird nach DOM-Aufbau gesetzt
+    window.addEventListener('load', () => {
+	  const btn = document.getElementById('btnDarkMode');
+	  if (btn) btn.textContent = '☀️';
+	});
+  }
+})();
+
+// ══════════════════════════════════════════════════════════════
 // MITGLIEDER
 // ══════════════════════════════════════════════════════════════
 function memberDisplayName(m) {
@@ -1640,19 +1709,19 @@ function renderQuickView(gameId) {
       const foTotal = calcGuestTotal(gst, 'food');
       const total   = drTotal + foTotal;
       const tipVal  = parseFloat(gst.tip || 0);
-	  const zebraClass = si % 2 === 0 ? 'bg-white' : 'bg-gray-100';
-      guestRows += `
-        <tr class="${gst.paid ? 'bg-green-50' : zebraClass}">
-          <td class="border p-2 text-sm font-medium">${esc(gst.name||'')}</td>
-          <td class="border p-2 text-sm text-right">${drTotal.toFixed(2)} €</td>
-          <td class="border p-2 text-sm text-right">${foTotal.toFixed(2)} €</td>
-          <td class="border p-2 text-sm text-right font-semibold">${total.toFixed(2)} €</td>
-          <td class="border p-2 text-center">
+	  const tdBg = gst.paid ? 'style="background-color:inherit"' : '';
+	guestRows += `
+	  <tr style="background-color:${gst.paid ? '#bbf7d0' : ''}" data-paid-row="${gst.paid}">
+		<td class="border p-2 text-sm font-medium" ${tdBg}>${esc(gst.name||'')}</td>
+		<td class="border p-2 text-sm text-right"  ${tdBg}>${drTotal.toFixed(2)} €</td>
+		<td class="border p-2 text-sm text-right"  ${tdBg}>${foTotal.toFixed(2)} €</td>
+		<td class="border p-2 text-sm text-right font-semibold" ${tdBg}>${total.toFixed(2)} €</td>
+		<td class="border p-2 text-center" ${tdBg}>
   <button onclick="qvOpenDrinks('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-base" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
   <button onclick="qvOpenFood('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-base" title="Essen" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🍴</button>
   ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="bg-gray-100 hover:bg-red-100 border border-gray-300 hover:border-red-300 rounded px-1.5 py-0.5 text-base" title="Gast löschen">🗑️</button>` : ''}
 </td>
-<td class="border p-2 text-center">
+<td class="border p-2 text-center" ${tdBg}>
   ${gst.paid
     ? `<button onclick="qvShowGuestDetail('${gameId}',${idx})" class="bg-slate-500 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs font-medium">📄 Details</button>`
     : `<button onclick="qvOpenSettle('${gameId}',${idx})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium">Abrechnen</button>`}
