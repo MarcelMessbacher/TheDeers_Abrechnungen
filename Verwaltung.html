@@ -38,18 +38,25 @@
     window.authUtils     = { signInWithEmailAndPassword, onAuthStateChanged, signOut };
     window.firebaseReady = true;
 
-    onAuthStateChanged(auth, user => {
-      window.currentFirebaseUser = user;
-      if (user) {
-        document.getElementById('loginPage').classList.add('hidden');
-        document.getElementById('mainApp').classList.remove('hidden');
-        window.dispatchEvent(new CustomEvent('userLoggedIn'));
-      } else {
-        if (window.unsubscribeAll) window.unsubscribeAll();
-        document.getElementById('loginPage').classList.remove('hidden');
-        document.getElementById('mainApp').classList.add('hidden');
-      }
-    });
+
+	onAuthStateChanged(auth, user => {
+	  window.currentFirebaseUser = user;
+	  if (user) {
+		document.getElementById('loginPage').classList.add('hidden');
+		document.getElementById('mainApp').classList.remove('hidden');
+		// Direkt initApp aufrufen, statt auf Event zu warten
+		if (typeof window.initApp === 'function') {
+		  window.initApp();
+		} else {
+		  // initApp noch nicht geladen – Event als Fallback
+		  window.dispatchEvent(new CustomEvent('userLoggedIn'));
+		}
+	  } else {
+		if (window.unsubscribeAll) window.unsubscribeAll();
+		document.getElementById('loginPage').classList.remove('hidden');
+		document.getElementById('mainApp').classList.add('hidden');
+	  }
+	});
     window.dispatchEvent(new Event('firebaseReady'));
   </script>
   <style>
@@ -241,6 +248,8 @@
 .dark .bg-blue-50 { background-color: #1a2744 !important; }
 .dark .border-blue-200 { border-color: #1e3a5f !important; }
 .dark .text-blue-800 { color: #93c5fd !important; }
+
+.no-wrap { white-space: nowrap; }
   </style>
 </head>
 <body class="bg-gray-100 p-3 sm:p-6 transition-colors duration-200">
@@ -250,7 +259,7 @@
   <span id="syncText">Verbunden</span>
 </div>
 
-<button id="btnDarkMode" onclick="toggleDarkMode()"
+<button id="btnDarkMode"
   class="fixed top-2 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
   title="Dark Mode umschalten">🌙</button>
 
@@ -350,11 +359,11 @@
             <tr>
               <th class="p-3 border">Kalenderwoche</th>
               <th class="p-3 border">Buchungen</th>
-              <th class="p-3 border text-right">Getränke VK</th>
-              <th class="p-3 border text-right">Essen VK</th>
-              <th class="p-3 border text-right">Gesamtumsatz</th>
-              <th class="p-3 border text-right">Einkauf</th>
-              <th class="p-3 border text-right">Rohertrag</th>
+              <th class="p-3 border text-right no-wrap">Getränke VK</th>
+			<th class="p-3 border text-right no-wrap">Essen VK</th>
+			<th class="p-3 border text-right no-wrap">Gesamtumsatz</th>
+			<th class="p-3 border text-right no-wrap">Einkauf</th>
+			<th class="p-3 border text-right no-wrap">Rohertrag</th>
               <th class="p-3 border text-center">Abrechnung</th>
               <th class="p-3 border text-center">Details</th>
             </tr>
@@ -364,11 +373,11 @@
             <tr>
               <td class="p-3 border">GESAMT</td>
               <td class="p-3 border text-center" id="mTotBuch">0</td>
-              <td class="p-3 border text-right"  id="mTotGtr">0,00 €</td>
-              <td class="p-3 border text-right"  id="mTotEss">0,00 €</td>
-              <td class="p-3 border text-right"  id="mTotVK">0,00 €</td>
-              <td class="p-3 border text-right"  id="mTotEK">0,00 €</td>
-              <td class="p-3 border text-right"  id="mTotRoh">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="mTotGtr">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="mTotEss">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="mTotVK">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="mTotEK">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="mTotRoh">0,00 €</td>
               <td class="p-3 border"></td>
               <td class="p-3 border"></td>
             </tr>
@@ -384,10 +393,10 @@
             <tr>
               <th class="p-3 border">Kalenderwoche</th>
               <th class="p-3 border text-center">Spiele</th>
-              <th class="p-3 border text-right">Getränke</th>
-              <th class="p-3 border text-right">Essen</th>
-              <th class="p-3 border text-right">Trinkgeld</th>
-              <th class="p-3 border text-right">Summe</th>
+				<th class="p-3 border text-right no-wrap">Getränke</th>
+				<th class="p-3 border text-right no-wrap">Essen</th>
+				<th class="p-3 border text-right no-wrap">Trinkgeld</th>
+				<th class="p-3 border text-right no-wrap">Summe</th>
               <th class="p-3 border text-center">Abrechnung</th>
               <th class="p-3 border text-center">Details</th>
             </tr>
@@ -397,10 +406,10 @@
             <tr>
               <td class="p-3 border">GESAMT</td>
               <td class="p-3 border text-center" id="gTotSpiele">0</td>
-              <td class="p-3 border text-right"  id="gTotGtr">0,00 €</td>
-              <td class="p-3 border text-right"  id="gTotEss">0,00 €</td>
-              <td class="p-3 border text-right"  id="gTotTip">0,00 €</td>
-              <td class="p-3 border text-right"  id="gTotSum">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="gTotGtr">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="gTotEss">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="gTotTip">0,00 €</td>
+				<td class="p-3 border text-right no-wrap"  id="gTotSum">0,00 €</td>
               <td class="p-3 border"></td>
               <td class="p-3 border"></td>
             </tr>
@@ -440,12 +449,12 @@
 </div>
 
 <div id="modalBooking" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
-  <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-bg">
+  <div class="bg-white p-3 sm:p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto modal-bg">
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchung erfassen</h2>
       <p id="bookingLabel" class="text-sm text-gray-500 mb-4"></p>
-      <div class="overflow-x-auto">
-	  <table class="w-full text-sm border-collapse mb-3" style="min-width:360px">
+      <div class="overflow-x-auto" style="max-width:100%">
+		<table class="w-full text-sm border-collapse mb-3" style="min-width:280px">
 		<thead class="bg-gray-100">
 		  <tr>
 			<th class="border p-2 text-left">Artikel</th>
@@ -815,7 +824,7 @@ let listenersActive = false;
 // ══════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════
-const fEuro = v => ((v||0).toFixed(2).replace('.',',') + ' €');
+const fEuro = v => ((v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €');
 const fDate = s => { if(!s) return ''; const [y,m,d]=s.split('-'); return `${d}.${m}.${y}`; };
 const today = () => new Date().toISOString().split('T')[0];
 const r2    = n => Math.round(n*100)/100;
@@ -1102,6 +1111,7 @@ function toggleDarkMode() {
   document.getElementById('btnDarkMode').textContent = isDark ? '☀️' : '🌙';
 }
 window.toggleDarkMode = toggleDarkMode;
+document.getElementById('btnDarkMode').addEventListener('click', toggleDarkMode);
 
 // Beim Laden gespeicherten Zustand wiederherstellen
 (function() {
@@ -1109,6 +1119,16 @@ window.toggleDarkMode = toggleDarkMode;
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   if (saved === '1' || (saved === null && prefersDark)) {
     document.documentElement.classList.add('dark');
+	
+	window.initApp = initApp;
+
+	window.addEventListener('load', () => {
+	  showPage('members');
+	});
+
+	window.addEventListener('userLoggedIn', () => {
+	  initApp();
+	});
     // Button-Text wird nach DOM-Aufbau gesetzt
     window.addEventListener('load', () => {
 	  const btn = document.getElementById('btnDarkMode');
@@ -1302,7 +1322,7 @@ function buildBkGrids() {
     tr.id = `bkrow-${id}`;
     tr.innerHTML = `
       <td class="border p-2">${esc(art.name)}</td>
-      <td class="border p-2 text-right">${fEuro(art.memberPrice)}</td>
+      <td class="border p-2 text-right no-wrap">${fEuro(art.memberPrice)}</td>
       <td class="border p-2 text-center">
         <div class="flex items-center justify-center gap-2">
           <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
@@ -1310,7 +1330,7 @@ function buildBkGrids() {
           <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
-      <td class="border p-2 text-right" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
+      <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
     dBody.appendChild(tr);
   });
 
@@ -1760,9 +1780,9 @@ function renderQuickView(gameId) {
 	guestRows += `
 	  <tr style="background-color:${gst.paid ? '#bbf7d0' : ''}" data-paid-row="${gst.paid}">
 		<td class="border p-2 text-sm font-medium" ${tdBg}>${esc(gst.name||'')}</td>
-		<td class="border p-2 text-sm text-right"  ${tdBg}>${drTotal.toFixed(2)} €</td>
-		<td class="border p-2 text-sm text-right"  ${tdBg}>${foTotal.toFixed(2)} €</td>
-		<td class="border p-2 text-sm text-right font-semibold" ${tdBg}>${total.toFixed(2)} €</td>
+		<td class="border p-2 text-sm text-right no-wrap">${drTotal.toFixed(2)} €</td>
+		<td class="border p-2 text-sm text-right no-wrap">${foTotal.toFixed(2)} €</td>
+		<td class="border p-2 text-sm text-right font-semibold no-wrap">${total.toFixed(2)} €</td>
 		<td class="border p-2 text-center" ${tdBg}>
   <button onclick="qvOpenDrinks('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-base" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
   <button onclick="qvOpenFood('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-base" title="Essen" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🍴</button>
@@ -2536,11 +2556,11 @@ function renderMemberReport(data) {
     row.innerHTML=`
       <td class="p-3 border text-center font-medium">${key}</td>
       <td class="p-3 border text-center">${d.buchungen}</td>
-      <td class="p-3 border text-right">${fEuro(d.getraenkeVK)}</td>
-      <td class="p-3 border text-right">${fEuro(d.essenVK)}</td>
-      <td class="p-3 border text-right font-semibold">${fEuro(d.gesamtVK)}</td>
-      <td class="p-3 border text-right text-gray-500">${fEuro(d.gesamtEK)}</td>
-      <td class="p-3 border text-right text-green-700 font-semibold">${fEuro(d.gesamtVK-d.gesamtEK)}</td>
+		<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
+		<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
+		<td class="p-3 border text-right no-wrap font-semibold">${fEuro(d.gesamtVK)}</td>
+		<td class="p-3 border text-right no-wrap text-gray-500">${fEuro(d.gesamtEK)}</td>
+		<td class="p-3 border text-right no-wrap text-green-700 font-semibold">${fEuro(d.gesamtVK-d.gesamtEK)}</td>
       <td class="p-3 border text-center">
         ${abr?.pdfData ? `<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>` : '<span class="text-gray-300 text-xs">–</span>'}
       </td>
@@ -2574,10 +2594,10 @@ function renderGameReport(data) {
     row.innerHTML=`
       <td class="p-3 border text-center font-medium">${key}</td>
       <td class="p-3 border text-center">${d.spiele.length}</td>
-      <td class="p-3 border text-right">${fEuro(d.getraenkeVK)}</td>
-      <td class="p-3 border text-right">${fEuro(d.essenVK)}</td>
-      <td class="p-3 border text-right">${fEuro(d.trinkgeld)}</td>
-      <td class="p-3 border text-right font-semibold">${fEuro(d.gesamtVK+d.trinkgeld)}</td>
+		<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
+		<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
+		<td class="p-3 border text-right no-wrap">${fEuro(d.trinkgeld)}</td>
+		<td class="p-3 border text-right no-wrap font-semibold">${fEuro(d.gesamtVK+d.trinkgeld)}</td>
       <td class="p-3 border text-center">
         ${abr?.pdfData ? `<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>` : '<span class="text-gray-300 text-xs">–</span>'}
       </td>
@@ -2911,7 +2931,18 @@ async function initApp() {
 
 window.addEventListener('load', () => {
   showPage('members');
-  if (window.currentFirebaseUser) initApp();
+  // Falls Firebase-Modul schon fertig ist und User eingeloggt:
+  if (window.firebaseReady && window.currentFirebaseUser) {
+    initApp();
+    return;
+  }
+  // Falls Firebase noch nicht bereit ist, auf das Event warten:
+  if (!window.firebaseReady) {
+    window.addEventListener('firebaseReady', () => {
+      // onAuthStateChanged läuft asynchron – kurz warten
+      // damit currentFirebaseUser gesetzt werden kann
+    }, { once: true });
+  }
 });
 
 window.addEventListener('userLoggedIn', () => {
