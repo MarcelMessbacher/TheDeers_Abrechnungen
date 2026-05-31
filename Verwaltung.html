@@ -2932,9 +2932,15 @@ function renderDashboard() {
       rect.addEventListener('mouseleave', () => {
         tooltip.style.display = 'none';
       });
+      rect.addEventListener('touchstart', e => {
+        e.stopPropagation();
+      });
     });
   }, 0);
   }
+  document.addEventListener('touchstart', () => {
+      tooltip.style.display = 'none';
+    });
 
 	kwSorted.forEach(([label, v], i) => {
 		const x      = padL + i * (innerW / kwSorted.length) + (innerW / kwSorted.length - bw) / 2;
