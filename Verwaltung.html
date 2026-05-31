@@ -387,6 +387,7 @@
 			<th class="p-3 border text-right no-wrap">Gesamtumsatz</th>
 			<th class="p-3 border text-right no-wrap">Einkauf</th>
 			<th class="p-3 border text-right no-wrap">Rohertrag</th>
+              <th class="p-3 border text-center">Status</th>
               <th class="p-3 border text-center">Abrechnung</th>
               <th class="p-3 border text-center">Details</th>
             </tr>
@@ -402,6 +403,7 @@
 				<td class="p-3 border text-right no-wrap"  id="mTotEK">0,00 €</td>
 				<td class="p-3 border text-right no-wrap"  id="mTotRoh">0,00 €</td>
               <td class="p-3 border"></td>
+			  <td class="p-3 border"></td>
               <td class="p-3 border"></td>
             </tr>
           </tfoot>
@@ -420,6 +422,7 @@
 				<th class="p-3 border text-right no-wrap">Essen</th>
 				<th class="p-3 border text-right no-wrap">Trinkgeld</th>
 				<th class="p-3 border text-right no-wrap">Summe</th>
+              <th class="p-3 border text-center">Status</th>
               <th class="p-3 border text-center">Abrechnung</th>
               <th class="p-3 border text-center">Details</th>
             </tr>
@@ -434,6 +437,7 @@
 				<td class="p-3 border text-right no-wrap"  id="gTotTip">0,00 €</td>
 				<td class="p-3 border text-right no-wrap"  id="gTotSum">0,00 €</td>
               <td class="p-3 border"></td>
+			  <td class="p-3 border"></td>
               <td class="p-3 border"></td>
             </tr>
           </tfoot>
@@ -484,13 +488,19 @@
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchung erfassen</h2>
       <p id="bookingLabel" class="text-sm text-gray-500 mb-4"></p>
-      <div class="overflow-x-auto" style="max-width:100%">
-		<table class="w-full text-sm border-collapse mb-3" style="min-width:280px">
+      <div>
+		<table class="w-full text-sm border-collapse mb-3" style="table-layout:fixed">
+		<colgroup>
+		  <col style="width:40%">
+		  <col style="width:20%">
+		  <col style="width:22%">
+		  <col style="width:18%">
+		</colgroup>
 		<thead class="bg-gray-100">
 		  <tr>
 			<th class="border p-2 text-left">Artikel</th>
 			<th class="border p-2 text-right">Preis</th>
-			<th class="border p-2 text-center">Anzahl</th>
+			<th class="border p-2 text-center">Anz.</th>
 			<th class="border p-2 text-right">Summe</th>
 		  </tr>
 		</thead>
@@ -1360,11 +1370,11 @@ function buildBkGrids() {
     tr.innerHTML = `
       <td class="border p-2">${esc(art.name)}</td>
       <td class="border p-2 text-right no-wrap">${fEuro(art.memberPrice)}</td>
-      <td class="border p-2 text-center">
-        <div class="flex items-center justify-center gap-2">
-          <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
-          <span class="qdsp" id="bkqty-${id}">${qty}</span>
-          <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
+      <td class="border p-1 text-center">
+        <div class="flex items-center justify-center gap-1">
+          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',-1)">−</button>
+          <span class="qdsp" style="min-width:18px;font-size:1rem" id="bkqty-${id}">${qty}</span>
+          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
       <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
@@ -1379,11 +1389,11 @@ function buildBkGrids() {
     tr.innerHTML = `
       <td class="border p-2">${esc(art.name)}</td>
       <td class="border p-2 text-right no-wrap">${fEuro(art.memberPrice)}</td>
-      <td class="border p-2 text-center">
-        <div class="flex items-center justify-center gap-2">
-          <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
-          <span class="qdsp" id="bkqty-${id}">${qty}</span>
-          <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
+      <td class="border p-1 text-center">
+        <div class="flex items-center justify-center gap-1">
+          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',-1)">−</button>
+          <span class="qdsp" style="min-width:18px;font-size:1rem" id="bkqty-${id}">${qty}</span>
+          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
       <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
@@ -2597,14 +2607,24 @@ function renderMemberReport(data) {
     tb+=d.buchungen; tg+=d.getraenkeVK; te+=d.essenVK; tvk+=d.gesamtVK; tek+=d.gesamtEK;
     const abr = abrechnungen[key];
     const row = document.createElement('tr'); row.className='hover:bg-gray-50';
+    const status = abr?.status || null;
+    const statusCell = abr
+      ? `<select onchange="setAbrStatus('${key}', this.value)"
+           class="text-xs font-semibold rounded px-2 py-1 border-0 cursor-pointer
+             ${status === 'abgeschlossen' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}">
+           <option value="abgerechnet"   ${status !== 'abgeschlossen' ? 'selected' : ''}>🟠 Abgerechnet</option>
+           <option value="abgeschlossen" ${status === 'abgeschlossen' ? 'selected' : ''}>🟢 Abgeschlossen</option>
+         </select>`
+      : '<span class="text-gray-300 text-xs">–</span>';
     row.innerHTML=`
       <td class="p-3 border text-center font-medium">${key}</td>
       <td class="p-3 border text-center">${d.buchungen}</td>
-		<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
-		<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
-		<td class="p-3 border text-right no-wrap font-semibold">${fEuro(d.gesamtVK)}</td>
-		<td class="p-3 border text-right no-wrap text-gray-500">${fEuro(d.gesamtEK)}</td>
-		<td class="p-3 border text-right no-wrap text-green-700 font-semibold">${fEuro(d.gesamtVK-d.gesamtEK)}</td>
+			<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
+			<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
+			<td class="p-3 border text-right no-wrap font-semibold">${fEuro(d.gesamtVK)}</td>
+			<td class="p-3 border text-right no-wrap text-gray-500">${fEuro(d.gesamtEK)}</td>
+			<td class="p-3 border text-right no-wrap text-green-700 font-semibold">${fEuro(d.gesamtVK-d.gesamtEK)}</td>
+      <td class="p-3 border text-center">${statusCell}</td>
       <td class="p-3 border text-center">
         ${abr?.pdfData ? `<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>` : '<span class="text-gray-300 text-xs">–</span>'}
       </td>
@@ -2635,13 +2655,23 @@ function renderGameReport(data) {
     tsp+=d.spiele.length; tg+=d.getraenkeVK; te+=d.essenVK; tt+=d.trinkgeld; ts+=d.gesamtVK+d.trinkgeld;
     const abr = abrechnungen[key];
     const row = document.createElement('tr'); row.className='hover:bg-gray-50';
+    const status = abr?.status || null;
+    const statusCell = abr
+      ? `<select onchange="setAbrStatus('${key}', this.value)"
+           class="text-xs font-semibold rounded px-2 py-1 border-0 cursor-pointer
+             ${status === 'abgeschlossen' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}">
+           <option value="abgerechnet"   ${status !== 'abgeschlossen' ? 'selected' : ''}>🟠 Abgerechnet</option>
+           <option value="abgeschlossen" ${status === 'abgeschlossen' ? 'selected' : ''}>🟢 Abgeschlossen</option>
+         </select>`
+      : '<span class="text-gray-300 text-xs">–</span>';
     row.innerHTML=`
       <td class="p-3 border text-center font-medium">${key}</td>
       <td class="p-3 border text-center">${d.spiele.length}</td>
-		<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
-		<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
-		<td class="p-3 border text-right no-wrap">${fEuro(d.trinkgeld)}</td>
-		<td class="p-3 border text-right no-wrap font-semibold">${fEuro(d.gesamtVK+d.trinkgeld)}</td>
+			<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
+			<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
+			<td class="p-3 border text-right no-wrap">${fEuro(d.trinkgeld)}</td>
+			<td class="p-3 border text-right no-wrap font-semibold">${fEuro(d.gesamtVK+d.trinkgeld)}</td>
+      <td class="p-3 border text-center">${statusCell}</td>
       <td class="p-3 border text-center">
         ${abr?.pdfData ? `<button onclick="showAbrechnungPDF('${key}')" class="text-xl" title="Abrechnung anzeigen">📄</button>` : '<span class="text-gray-300 text-xs">–</span>'}
       </td>
@@ -2663,6 +2693,15 @@ function showAbrechnungPDF(weekKey) {
   openPdfDataUri(abr.pdfData);
 }
 window.showAbrechnungPDF = showAbrechnungPDF;
+
+async function setAbrStatus(weekKey, newStatus) {
+  const abr = abrechnungen[weekKey];
+  if (!abr?.id) return;
+  try {
+    await fbUpdate('abrechnungen', abr.id, { status: newStatus });
+  } catch(e) { showToast('Fehler beim Speichern des Status.', 'error'); }
+}
+window.setAbrStatus = setAbrStatus;
 
 function showMemberWeekDetails(key) {
   const d = reportData.member[key]; if (!d) return;
@@ -3230,7 +3269,8 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
   mk3('Unterschriften',  [['Datum:',''],['',''],['Unterschrift Dart:',''],['',''],['Unterschrift TSV:',''],['','']], bottomY, ML+thirdW*2+2, -1, []);
 
   const pdfData = doc.output('datauristring');
-  const abrData = { weekKey, week:kwNum, year:kwYr, kwRange:range.label, kontoVor, kontoNeu, gesamtRoh, gesamtUmsatz, pdfData, createdAt:new Date().toISOString() };
+  const existingStatus = abrechnungen[weekKey]?.status;
+  const abrData = { weekKey, week:kwNum, year:kwYr, kwRange:range.label, kontoVor, kontoNeu, gesamtRoh, gesamtUmsatz, pdfData, createdAt:new Date().toISOString(), status: existingStatus || 'abgerechnet' };
 
   try {
     const existingId = abrechnungen[weekKey]?.id;
