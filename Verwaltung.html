@@ -2928,19 +2928,25 @@ function renderDashboard() {
           tooltip.style.left = left + 'px';
           tooltip.style.top  = (e.clientY - 10) + 'px';
         });
-      });
+       });
       rect.addEventListener('mouseleave', () => {
         tooltip.style.display = 'none';
       });
       rect.addEventListener('touchstart', e => {
         e.stopPropagation();
-      });
+      }, { passive: true });
     });
+
+    // Einmalig registrieren, nur wenn noch nicht vorhanden
+    if (!document._kwTooltipTouchBound) {
+      document._kwTooltipTouchBound = true;
+      document.addEventListener('touchstart', () => {
+        const tt = document.getElementById('kwTooltip');
+        if (tt) tt.style.display = 'none';
+      }, { passive: true });
+    }
   }, 0);
-  }
-  document.addEventListener('touchstart', () => {
-      tooltip.style.display = 'none';
-    });
+  }     
 
 	kwSorted.forEach(([label, v], i) => {
 		const x      = padL + i * (innerW / kwSorted.length) + (innerW / kwSorted.length - bw) / 2;
