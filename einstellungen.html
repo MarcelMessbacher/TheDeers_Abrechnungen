@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>Einstellungen – The Deers</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc }
@@ -370,6 +371,26 @@
       // Tab switching
       document.getElementById('tabBtnArticles').addEventListener('click', () => switchTab('articles'));
       document.getElementById('tabBtnTeams').addEventListener('click',    () => switchTab('teams'));
+	  
+	  // Dark Mode
+		const btnDark = document.getElementById('btnDarkMode');
+		btnDark.addEventListener('click', () => {
+		  const isDark = document.documentElement.classList.toggle('dark');
+		  localStorage.setItem('darkMode', isDark ? '1' : '0');
+		  btnDark.textContent = isDark ? '☀️' : '🌙';
+		});
+		// Dark Mode Init (außerhalb DOMContentLoaded)
+		(function() {
+		  const saved = localStorage.getItem('darkMode');
+		  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+		  if (saved === '1' || (saved === null && prefersDark)) {
+			document.documentElement.classList.add('dark');
+			window.addEventListener('DOMContentLoaded', () => {
+			  const btn = document.getElementById('btnDarkMode');
+			  if (btn) btn.textContent = '☀️';
+			}, { once: true });
+		  }
+		})();
     });
 
     function switchTab(tab) {
@@ -397,9 +418,36 @@
     .lbtn:disabled { background:#a0aec0;cursor:not-allowed; }
     .tab-btn { transition:all .2s;padding:0.5rem 1.25rem;border-bottom:3px solid transparent;color:#6b7280; }
     .tab-btn.active { border-bottom-color:#374151;font-weight:700;color:#111827; }
+	
+	.dark body { background-color: #111827; color: #f9fafb; }
+	.dark .bg-white { background-color: #1f2937 !important; }
+	.dark .bg-gray-100 { background-color: #111827 !important; }
+	.dark .bg-gray-50  { background-color: #1f2937 !important; }
+	.dark .bg-gray-200 { background-color: #374151 !important; }
+	.dark .shadow { box-shadow: 0 1px 3px rgba(0,0,0,.5) !important; }
+	.dark .border  { border-color: #374151 !important; }
+	.dark .text-gray-800 { color: #f3f4f6 !important; }
+	.dark .text-gray-700 { color: #d1d5db !important; }
+	.dark .text-gray-600 { color: #9ca3af !important; }
+	.dark .text-gray-500 { color: #6b7280 !important; }
+	.dark input, .dark select, .dark textarea {
+	  background-color: #374151 !important;
+	  color: #f9fafb !important;
+	  border-color: #4b5563 !important;
+	}
+	.dark .login-wrap { background-color: #111827; }
+	.dark .login-box  { background-color: #1f2937 !important; }
+	.dark .linput { background-color: #374151 !important; border-color: #4b5563 !important; color: #f9fafb !important; }
+	.dark .tab-btn.active { border-bottom-color: #f9fafb !important; color: #f9fafb !important; }
+	.dark .tab-btn { color: #6b7280; }
+	.dark tr.hover\:bg-gray-50:hover td { background-color: #374151 !important; }
   </style>
 </head>
 <body class="bg-gray-100 p-3 sm:p-6">
+
+<button id="btnDarkMode"
+  class="fixed top-2 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
+  title="Dark Mode umschalten">🌙</button>
 
 <!-- LOGIN -->
 <div id="loginPage" class="login-wrap">
