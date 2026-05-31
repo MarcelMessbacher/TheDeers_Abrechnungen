@@ -1784,19 +1784,21 @@ function renderQuickView(gameId) {
 		<td class="border p-2 text-sm text-right no-wrap">${foTotal.toFixed(2)} €</td>
 		<td class="border p-2 text-sm text-right font-semibold no-wrap">${total.toFixed(2)} €</td>
 		<td class="border p-2 text-center" ${tdBg}>
-  <button onclick="qvOpenDrinks('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-base" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
-  <button onclick="qvOpenFood('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-base" title="Essen" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🍴</button>
-  ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="bg-gray-100 hover:bg-red-100 border border-gray-300 hover:border-red-300 rounded px-1.5 py-0.5 text-base" title="Gast löschen">🗑️</button>` : ''}
-</td>
+		  <button onclick="qvOpenDrinks('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-xl" title="Getränke" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🥛</button>
+		  <button onclick="qvOpenFood('${gameId}',${idx})" class="bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded px-1.5 py-0.5 text-xl" title="Essen" ${gst.paid ? 'disabled style="opacity:.4"' : ''}>🍴</button>
+		</td>
 <td class="border p-2 text-center" ${tdBg}>
   ${gst.paid
     ? `<button onclick="qvShowGuestDetail('${gameId}',${idx})" class="bg-slate-500 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs font-medium">📄 Details</button>`
     : `<button onclick="qvOpenSettle('${gameId}',${idx})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium">Abrechnen</button>`}
 </td>
+<td class="border p-2 text-center" ${tdBg}>
+  ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="text-red-500 hover:text-red-700 text-xl font-bold leading-none" title="Gast löschen">✕</button>` : ''}
+</td>
         </tr>`;
     });
   } else {
-    guestRows = `<tr><td colspan="6" class="p-3 text-center text-gray-400 text-sm">Noch keine Gäste.</td></tr>`;
+    guestRows = `<tr><td colspan="7" class="p-3 text-center text-gray-400 text-sm">Noch keine Gäste.</td></tr>`;
   }
 
   const allPaid = g.gaeste && g.gaeste.length > 0 && g.gaeste.every(gst => gst.paid);
@@ -1823,6 +1825,7 @@ function renderQuickView(gameId) {
             <th class="border p-2 text-right">Gesamt</th>
             <th class="border p-2 text-center">Buchen</th>
 			<th class="border p-2 text-center">Abrechnung</th>
+			<th class="border p-2 text-center"></th>
           </tr>
         </thead>
         <tbody>${guestRows}</tbody>
@@ -1935,12 +1938,12 @@ function qvOpenDrinks(gameId, guestIdx) {
   guestDrinkList.filter(x => !x.disabled).forEach(gd => {
     const menge = data[gd.name] || 0;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="p-2 border">${esc(gd.name)}</td><td class="p-2 border text-right">${gd.preis.toFixed(2)} €</td>
+    tr.innerHTML = `<td class="p-2 border">${esc(gd.name)}</td><td class="p-2 border text-right no-wrap">${gd.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
         <input type="number" min="0" value="${menge}" class="gDrinkQty border rounded w-16 text-center p-1" data-preis="${gd.preis}">
         <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gDPlus">+1</button>
       </div></td>
-      <td class="p-2 border gDSum text-right">${(gd.preis*menge).toFixed(2)} €</td>`;
+      <td class="p-2 border gDSum text-right no-wrap">${(gd.preis*menge).toFixed(2)} €</td>`;
     const inp = tr.querySelector('.gDrinkQty');
     inp.addEventListener('input', () => { tr.querySelector('.gDSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGDrinksSum(); });
     tr.querySelector('.gDPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
@@ -1962,12 +1965,12 @@ function qvOpenFood(gameId, guestIdx) {
   guestFoodList.filter(x => !x.disabled).forEach(gf => {
     const menge = data[gf.name] || 0;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="p-2 border">${esc(gf.name)}</td><td class="p-2 border text-right">${gf.preis.toFixed(2)} €</td>
+    tr.innerHTML = `<td class="p-2 border">${esc(gf.name)}</td><td class="p-2 border text-right no-wrap">${gf.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
         <input type="number" min="0" value="${menge}" class="gFoodQty border rounded w-16 text-center p-1" data-preis="${gf.preis}">
         <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gFPlus">+1</button>
       </div></td>
-      <td class="p-2 border gFSum text-right">${(gf.preis*menge).toFixed(2)} €</td>`;
+      <td class="p-2 border gFSum text-right no-wrap">${(gf.preis*menge).toFixed(2)} €</td>`;
     const inp = tr.querySelector('.gFoodQty');
     inp.addEventListener('input', () => { tr.querySelector('.gFSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGFoodSum(); });
     tr.querySelector('.gFPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
@@ -2190,12 +2193,12 @@ function openGuestDrinks(row) {
   guestDrinkList.filter(g => !g.disabled).forEach(g => {
     const menge = data[g.name] || 0;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right">${g.preis.toFixed(2)} €</td>
+    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right no-wrap">${g.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
         <input type="number" min="0" value="${menge}" class="gDrinkQty border rounded w-16 text-center p-1" data-preis="${g.preis}">
         <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gDPlus">+1</button>
       </div></td>
-      <td class="p-2 border gDSum text-right">${(g.preis*menge).toFixed(2)} €</td>`;
+      <td class="p-2 border gDSum text-right no-wrap">${(g.preis*menge).toFixed(2)} €</td>`;
     const inp = tr.querySelector('.gDrinkQty');
     inp.addEventListener('input', () => { tr.querySelector('.gDSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGDrinksSum(); });
     tr.querySelector('.gDPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
@@ -2241,7 +2244,7 @@ function openGuestFood(row) {
   guestFoodList.filter(g => !g.disabled).forEach(g => {
     const menge = data[g.name] || 0;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right">${g.preis.toFixed(2)} €</td>
+    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right no-wrap">${g.preis.toFixed(2)} €</td>
       <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
         <input type="number" min="0" value="${menge}" class="gFoodQty border rounded w-16 text-center p-1" data-preis="${g.preis}">
         <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gFPlus">+1</button>
@@ -2626,8 +2629,8 @@ function showMemberWeekDetails(key) {
   const drinks = Object.entries(d.articles).filter(([,v])=>v.type==='drink');
   const food   = Object.entries(d.articles).filter(([,v])=>v.type==='food');
   let html = '';
-  if (drinks.length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>'; drinks.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; }); html+='</tbody></table></div>'; }
-  if (food.length)   { html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>'; food.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700">${fEuro(v.vk-v.ek)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  if (drinks.length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right no-wrap">VK</th><th class="p-2 border text-right no-wrap">EK</th><th class="p-2 border text-right no-wrap">Rohertrag</th></tr></thead><tbody>'; drinks.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right no-wrap">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500 no-wrap">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700 no-wrap">${fEuro(v.vk-v.ek)}</td></tr>`; }); html+='</tbody></table></div>'; }
+  if (food.length)   { html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:380px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th><th class="p-2 border text-right">EK</th><th class="p-2 border text-right">Rohertrag</th></tr></thead><tbody>'; food.forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right no-wrap">${fEuro(v.vk)}</td><td class="p-2 border text-right text-gray-500 no-wrap">${fEuro(v.ek)}</td><td class="p-2 border text-right text-green-700 no-wrap">${fEuro(v.vk-v.ek)}</td></tr>`; }); html+='</tbody></table></div>'; }
   if (!html) html = '<p class="text-gray-400">Keine Artikel.</p>';
   document.getElementById('wkDetailContent').innerHTML = html;
   document.getElementById('modalWeekDetails').classList.remove('hidden');
