@@ -2919,8 +2919,15 @@ function renderDashboard() {
           `🔵 Gäste: ${rect.dataset.gast}<br>` +
           `<strong>Gesamt: ${rect.dataset.total}</strong>`;
         tooltip.style.display = 'block';
-        tooltip.style.left = (e.clientX + 16) + 'px';
-        tooltip.style.top  = (e.clientY - 10) + 'px';
+        tooltip.style.left = '-9999px';
+        tooltip.style.top  = '-9999px';
+        requestAnimationFrame(() => {
+          const tw = tooltip.offsetWidth;
+          const spaceRight = window.innerWidth - e.clientX;
+          const left = spaceRight < tw + 24 ? e.clientX - tw - 8 : e.clientX + 16;
+          tooltip.style.left = left + 'px';
+          tooltip.style.top  = (e.clientY - 10) + 'px';
+        });
       });
       rect.addEventListener('mouseleave', () => {
         tooltip.style.display = 'none';
