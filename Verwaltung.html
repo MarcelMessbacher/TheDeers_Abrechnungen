@@ -1749,6 +1749,7 @@ function sortedGaeste(gaeste) {
 function qvShowGuestDetail(gameId, guestIdx) {
   const g = games.find(x => x.id === gameId); if (!g) return;
   const gst = g.gaeste[guestIdx]; if (!gst) return;
+  document.querySelector('#modalGuestDrinks h2').textContent = `Getränke – ${gst.name || ''}`;
   document.getElementById('guestDetailName').textContent = gst.name || '';
   const tipVal = parseFloat(gst.tip || 0);
   let html = '';
@@ -1977,6 +1978,9 @@ function qvOpenDrinks(gameId, guestIdx) {
   const g = games.find(x => x.id === gameId); if (!g) return;
   const gst = g.gaeste[guestIdx]; if (!gst) return;
 
+  document.querySelector('#modalGuestDrinks h2').textContent = `Getränke – ${gst.name || ''}`;  // NEU
+
+
   // activeGuestRow simulieren über Objekt-Proxy
   activeGuestRow = createQvProxy(gameId, guestIdx, 'drinks');
 
@@ -2004,6 +2008,8 @@ window.qvOpenDrinks = qvOpenDrinks;
 function qvOpenFood(gameId, guestIdx) {
   const g = games.find(x => x.id === gameId); if (!g) return;
   const gst = g.gaeste[guestIdx]; if (!gst) return;
+
+  document.querySelector('#modalGuestFood h2').textContent = `Essen – ${gst.name || ''}`;  // NEU
 
   activeGuestRow = createQvProxy(gameId, guestIdx, 'food');
 
@@ -2617,7 +2623,7 @@ function renderMemberReport(data) {
          </select>`
       : '<span class="text-gray-300 text-xs">–</span>';
     row.innerHTML=`
-      <td class="p-3 border text-center font-medium">${key}</td>
+      <td class="p-3 border text-center font-medium" title="${kwRange(d.week, d.year).label}">${key}</td>
       <td class="p-3 border text-center">${d.buchungen}</td>
 			<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
 			<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
@@ -2665,7 +2671,7 @@ function renderGameReport(data) {
          </select>`
       : '<span class="text-gray-300 text-xs">–</span>';
     row.innerHTML=`
-      <td class="p-3 border text-center font-medium">${key}</td>
+      <td class="p-3 border text-center font-medium" title="${kwRange(d.week, d.year).label}">${key}</td>
       <td class="p-3 border text-center">${d.spiele.length}</td>
 			<td class="p-3 border text-right no-wrap">${fEuro(d.getraenkeVK)}</td>
 			<td class="p-3 border text-right no-wrap">${fEuro(d.essenVK)}</td>
