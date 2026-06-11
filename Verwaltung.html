@@ -282,11 +282,11 @@
 </div>
 
 <button id="btnDarkMode"
-  class="fixed top-2 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
+  class="hidden fixed top-2 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
   title="Dark Mode umschalten">🌙</button>
 
 <button id="btnQR"
-  class="fixed top-2 right-12 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
+  class="hidden fixed top-12 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
   title="Login QR-Code">🔒</button>
 
 <!-- ═══════════ LOGIN ═══════════ -->
@@ -1054,6 +1054,8 @@ function startRealtimeListeners() {
       refreshHistoryModal(historyMemberId);
     }
     setSyncStatus('ok', 'Verbunden');
+document.getElementById('btnDarkMode').classList.remove('hidden');
+document.getElementById('btnQR').classList.remove('hidden');
   }, err => { console.error('Mitglieder-Listener:', err); setSyncStatus('error', 'Verbindungsfehler'); });
 
   unsubBuchungen = FU().onSnapshot(FU().collection(DB(), 'buchungen'), snap => {
@@ -1101,6 +1103,8 @@ function stopRealtimeListeners() {
   if (unsubAbrech)    { unsubAbrech();    unsubAbrech = null; }
   listenersActive = false;
   document.getElementById('syncIndicator').classList.add('hidden');
+  document.getElementById('btnDarkMode').classList.add('hidden');
+  document.getElementById('btnQR').classList.add('hidden');
 }
 window.unsubscribeAll = stopRealtimeListeners;
 
