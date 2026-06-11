@@ -285,6 +285,10 @@
   class="fixed top-2 right-2 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
   title="Dark Mode umschalten">🌙</button>
 
+<button id="btnQR"
+  class="fixed top-2 right-12 z-[9000] w-9 h-9 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
+  title="Login QR-Code">🔒</button>
+
 <!-- ═══════════ LOGIN ═══════════ -->
 <div id="loginPage" class="login-wrap">
   <div class="login-box">
@@ -3414,6 +3418,50 @@ window.addEventListener('load', () => {
 window.addEventListener('userLoggedIn', () => {
   initApp();
 });
+</script>
+<div id="modalQR" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded-xl w-full max-w-xs text-center shadow-xl">
+    <h2 class="text-lg font-bold mb-1 text-gray-800">Login QR-Code</h2>
+    <p class="text-xs text-gray-500 mb-1">Scannen → E-Mail vorausgefüllt → Passwort eingeben</p>
+    <p class="text-xs font-medium text-gray-700 mb-4">📧 kassier@thedeers.de</p>
+    <div id="qrCodeContainer" class="flex justify-center"></div>
+    <button onclick="document.getElementById('modalQR').classList.add('hidden')"
+      class="mt-5 bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600 text-sm">Schließen</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// QR-Code Modal – fix für kassier@thedeers.de
+const QR_EMAIL = 'kassier@thedeers.de';
+const QR_URL   = window.location.origin + window.location.pathname + '?email=' + encodeURIComponent(QR_EMAIL);
+
+document.getElementById('btnQR').addEventListener('click', () => {
+  const container = document.getElementById('qrCodeContainer');
+  document.getElementById('modalQR').classList.remove('hidden');
+  if (container.querySelector('canvas') || container.querySelector('img')) return; // bereits gerendert
+  new QRCode(container, {
+    text: QR_URL, width: 200, height: 200,
+    colorDark: '#111827', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+});
+
+document.getElementById('modalQR').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalQR'))
+    document.getElementById('modalQR').classList.add('hidden');
+});
+
+// E-Mail aus URL-Parameter vorausfüllen
+(function() {
+  const email = new URLSearchParams(window.location.search).get('email');
+  if (email) {
+    window.addEventListener('load', () => {
+      const f = document.getElementById('loginEmail');
+      if (f) f.value = decodeURIComponent(email);
+    });
+  }
+})();
 </script>
 </body>
 </html>
