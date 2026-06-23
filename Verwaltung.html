@@ -15,7 +15,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc,
-      onSnapshot, runTransaction, serverTimestamp, writeBatch, getDoc
+      onSnapshot, runTransaction, getDoc	
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut }
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -34,7 +34,7 @@
 
     window.firebaseDB    = db;
     window.firebaseAuth  = auth;
-    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, writeBatch, getDoc };
+    window.firebaseUtils = { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, runTransaction, getDoc };
     window.authUtils     = { signInWithEmailAndPassword, onAuthStateChanged, signOut };
     window.firebaseReady = true;
 
@@ -851,9 +851,7 @@ const HIST_PAGE_SIZE = 10;
 const HIST_MAX_TOTAL = 20;
 let settleMemberId   = null;
 let confirmCb        = null;
-let editGameId       = null;
 let quickViewGameId = null;
-let gameSnapshot 	 = null;
 let activeGuestRow   = null;
 let reportData       = { member:{}, game:{} };
 let currentReportTab = 'members';
@@ -961,10 +959,6 @@ async function fbAdd(coll, data) {
 async function fbUpdate(coll, id, data) {
   await FU().updateDoc(FU().doc(DB(), coll, id), { ...data, updatedAt: new Date().toISOString() });
 }
-async function fbGetAll(coll) {
-  const snap = await FU().getDocs(FU().collection(DB(), coll));
-  const res = []; snap.forEach(d => res.push({ id: d.id, ...d.data() })); return res;
-}
 async function fbDelete(coll, id) {
   await FU().deleteDoc(FU().doc(DB(), coll, id));
 }
@@ -1027,11 +1021,15 @@ async function settleAtomically(memberId, paid, settleDate) {
     const effectivePaid  = Math.min(r2(paid), r2(currentBalance));
     const newBalance     = r2(currentBalance - effectivePaid);
     let rem = effectivePaid;
-    for (const b of allBk) {
-      if (rem <= 0) break;
-      tx.update(FU().doc(DB(), 'buchungen', b.id), { settled: true, settledAt: settleDate, updatedAt: new Date().toISOString() });
-      rem = r2(rem - b.totalVK);
-    }
+	for (const b of allBk) {
+	  if (rem <= 0) break;
+	  if (rem >= b.totalVK - 0.005) {
+		tx.update(FU().doc(DB(), 'buchungen', b.id), { settled: true, settledAt: settleDate, updatedAt: new Date().toISOString() });
+		rem = r2(rem - b.totalVK);
+	  } else {
+		break; // Buchung nicht vollständig gedeckt – nicht als bezahlt markieren
+	  }
+	}
     tx.update(memberRef, { balance: newBalance, updatedAt: new Date().toISOString() });
   });
 }
@@ -1172,25 +1170,16 @@ document.getElementById('btnDarkMode').addEventListener('click', toggleDarkMode)
 (function() {
   const saved = localStorage.getItem('darkMode');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  if (saved === '1' || (saved === null && prefersDark)) {
-    document.documentElement.classList.add('dark');
-	
-	window.initApp = initApp;
-
-	window.addEventListener('load', () => {
-	  showPage('members');
-	});
-
-	window.addEventListener('userLoggedIn', () => {
-	  initApp();
-	});
-    // Button-Text wird nach DOM-Aufbau gesetzt
-    window.addEventListener('load', () => {
-	  const btn = document.getElementById('btnDarkMode');
-	  if (btn) btn.textContent = '☀️';
-	});
-  }
+if (saved === '1' || (saved === null && prefersDark)) {
+  document.documentElement.classList.add('dark');
+  window.addEventListener('load', () => {
+    const btn = document.getElementById('btnDarkMode');
+    if (btn) btn.textContent = '☀️';
+  });
+}
 })();
+
+window.initApp = initApp;
 
 // ══════════════════════════════════════════════════════════════
 // MITGLIEDER
@@ -1779,7 +1768,6 @@ function sortedGaeste(gaeste) {
 function qvShowGuestDetail(gameId, guestIdx) {
   const g = games.find(x => x.id === gameId); if (!g) return;
   const gst = g.gaeste[guestIdx]; if (!gst) return;
-  document.querySelector('#modalGuestDrinks h2').textContent = `Getränke – ${gst.name || ''}`;
   document.getElementById('guestDetailName').textContent = gst.name || '';
   const tipVal = parseFloat(gst.tip || 0);
   let html = '';
@@ -2221,75 +2209,10 @@ function clearGameForm() {
   document.getElementById('gOpponent').value = '';
   document.getElementById('gDate').value     = '';
 }
-function initGuestRows() {
-  for (let i = 0; i < 4; i++) addGuestRow(true);
-  // Leere Zeilen müssen nicht sortiert werden
-}
 
-function addGuestRow(skipSort = false) {
-  const tbody = document.getElementById('guestTableBody');
-  const row   = document.createElement('tr');
-  row.innerHTML = `
-    <td class="border p-2"><input type="text" class="border rounded w-full p-1" placeholder="Name"></td>
-    <td class="border p-2"><button class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded btnGDrinks text-sm">+ Hinzufügen</button></td>
-    <td class="border p-2"><button class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded btnGFood text-sm">+ Hinzufügen</button></td>
-    <td class="border p-2 gRowTotal text-right text-sm">0,00 €</td>
-    <td class="border p-2 text-center"><button class="bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded btnGSettle text-sm">Abrechnen</button></td>
-    <td class="border p-2 text-center"><button class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded btnGDel text-sm">X</button></td>`;
-  tbody.appendChild(row);
-  row.querySelector('.btnGDrinks').addEventListener('click', () => openGuestDrinks(row));
-  row.querySelector('.btnGFood').addEventListener('click',   () => openGuestFood(row));
-  row.querySelector('.btnGSettle').addEventListener('click', () => openGuestSettle(row));
-  row.querySelector('.btnGDel').addEventListener('click', () => {
-    const nm = row.querySelector('input').value.trim() || 'diesen Gast';
-    showConfirm(`${nm} wirklich löschen?`, () => { row.remove(); updateFinalizeBtn(); });
-  });
-
-  // Beim Tippen neu sortieren
-  row.querySelector('input[type="text"]').addEventListener('blur', () => sortGuestRows());
-
-  if (!skipSort) sortGuestRows();
-}
 const _btnAddGuestRow = document.getElementById('btnAddGuestRow');
 if (_btnAddGuestRow) _btnAddGuestRow.addEventListener('click', addGuestRow);
 
-function sortGuestRows() {
-  const tbody = document.getElementById('guestTableBody');
-  const rows  = [...tbody.querySelectorAll('tr')];
-  rows.sort((a, b) => {
-    const paidA = a.getAttribute('data-paid') === 'true' ? 1 : 0;
-    const paidB = b.getAttribute('data-paid') === 'true' ? 1 : 0;
-    if (paidA !== paidB) return paidA - paidB;
-    const nameA = a.querySelector('input[type="text"]')?.value.trim().toLowerCase() || '';
-    const nameB = b.querySelector('input[type="text"]')?.value.trim().toLowerCase() || '';
-    return nameA.localeCompare(nameB, 'de');
-  });
-  rows.forEach(r => tbody.appendChild(r));
-}
-
-// ── Getränke/Essen für Gast ──
-function openGuestDrinks(row) {
-  activeGuestRow = row;
-  const tbody  = document.getElementById('gDrinksBody'); tbody.innerHTML = '';
-  const saved  = row.getAttribute('data-drinks');
-  const data   = saved ? JSON.parse(saved) : {};
-  guestDrinkList.filter(g => !g.disabled).forEach(g => {
-    const menge = data[g.name] || 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right no-wrap">${g.preis.toFixed(2)} €</td>
-      <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
-        <input type="number" min="0" value="${menge}" class="gDrinkQty border rounded w-16 text-center p-1" data-preis="${g.preis}">
-        <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gDPlus">+1</button>
-      </div></td>
-      <td class="p-2 border gDSum text-right no-wrap">${(g.preis*menge).toFixed(2)} €</td>`;
-    const inp = tr.querySelector('.gDrinkQty');
-    inp.addEventListener('input', () => { tr.querySelector('.gDSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGDrinksSum(); });
-    tr.querySelector('.gDPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
-    tbody.appendChild(tr);
-  });
-  updateGDrinksSum();
-  document.getElementById('modalGuestDrinks').classList.remove('hidden');
-}
 function updateGDrinksSum() {
   let s = 0; document.querySelectorAll('#gDrinksBody .gDSum').forEach(td => s += parseFloat(td.textContent)||0);
   document.getElementById('gDrinksSum').textContent = s.toFixed(2);
@@ -2319,28 +2242,6 @@ document.getElementById('btnCloseGDrinks').addEventListener('click', () => {
   }
 });
 
-function openGuestFood(row) {
-  activeGuestRow = row;
-  const tbody = document.getElementById('gFoodBody'); tbody.innerHTML = '';
-  const saved = row.getAttribute('data-food');
-  const data  = saved ? JSON.parse(saved) : {};
-  guestFoodList.filter(g => !g.disabled).forEach(g => {
-    const menge = data[g.name] || 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="p-2 border">${esc(g.name)}</td><td class="p-2 border text-right no-wrap">${g.preis.toFixed(2)} €</td>
-      <td class="p-2 border text-center"><div class="flex items-center justify-center gap-2">
-        <input type="number" min="0" value="${menge}" class="gFoodQty border rounded w-16 text-center p-1" data-preis="${g.preis}">
-        <button class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm gFPlus">+1</button>
-      </div></td>
-      <td class="p-2 border gFSum text-right">${(g.preis*menge).toFixed(2)} €</td>`;
-    const inp = tr.querySelector('.gFoodQty');
-    inp.addEventListener('input', () => { tr.querySelector('.gFSum').textContent = (parseFloat(inp.dataset.preis)*(parseInt(inp.value)||0)).toFixed(2)+' €'; updateGFoodSum(); });
-    tr.querySelector('.gFPlus').addEventListener('click', () => { inp.value = (parseInt(inp.value)||0)+1; inp.dispatchEvent(new Event('input')); });
-    tbody.appendChild(tr);
-  });
-  updateGFoodSum();
-  document.getElementById('modalGuestFood').classList.remove('hidden');
-}
 function updateGFoodSum() {
   let s = 0; document.querySelectorAll('#gFoodBody .gFSum').forEach(td => s += parseFloat(td.textContent)||0);
   document.getElementById('gFoodSum').textContent = s.toFixed(2);
@@ -2397,30 +2298,6 @@ document.getElementById('btnCloseGFood').addEventListener('click', () => {
   }
 });
 
-function updateGuestRowTotal(row) {
-  let s = 0;
-  const dr = row.getAttribute('data-drinks');
-  if (dr) { const d = JSON.parse(dr); for (const [n,q] of Object.entries(d)) { const a = guestDrinkList.find(x=>x.name===n); if(a) s+=a.preis*q; } }
-  const fo = row.getAttribute('data-food');
-  if (fo) { const d = JSON.parse(fo);  for (const [n,q] of Object.entries(d)) { const a = guestFoodList.find(x=>x.name===n);  if(a) s+=a.preis*q; } }
-  row.querySelector('.gRowTotal').textContent = r2(s).toFixed(2)+' €';
-}
-
-function openGuestSettle(row) {
-  activeGuestRow = row;
-  const name  = row.querySelector('input').value || '(unbekannt)';
-  const total = row.querySelector('.gRowTotal').textContent;
-  let html = `<div class="bg-gray-50 p-3 rounded"><p><strong>Gast:</strong> ${esc(name)}</p><p><strong>Gesamt:</strong> ${esc(total)}</p>`;
-  const dr = row.getAttribute('data-drinks');
-  if (dr) { const d=JSON.parse(dr); if(Object.keys(d).length){ html+='<p class="mt-2 font-semibold">Getränke:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(d)){const a=guestDrinkList.find(x=>x.name===n); html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; } }
-  const fo = row.getAttribute('data-food');
-  if (fo) { const d=JSON.parse(fo);  if(Object.keys(d).length){ html+='<p class="mt-2 font-semibold">Essen:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(d)){const a=guestFoodList.find(x=>x.name===n);  html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; } }
-  html += '</div>';
-  document.getElementById('gSettleContent').innerHTML = html;
-  document.getElementById('gTipInput').value = '0.00';
-  setupTipBtns();
-  document.getElementById('modalGuestSettle').classList.remove('hidden');
-}
 function setupTipBtns() {
   ['gTip50','gTip100'].forEach(id => {
     const nb = document.getElementById(id).cloneNode(true);
@@ -2459,60 +2336,6 @@ document.getElementById('btnGuestPaid').addEventListener('click', () => {
 });
 document.getElementById('btnCloseGuestSettle').addEventListener('click', () => document.getElementById('modalGuestSettle').classList.add('hidden'));
 
-function updateFinalizeBtn() {
-  const btn = document.getElementById('btnFinalizeGame');
-  if (!btn) return; // Element existiert nicht mehr im neuen Layout
-}
-
-function takeGameSnapshot() {
-  const rows = [...document.querySelectorAll('#guestTableBody tr')];
-  return {
-    team:     document.getElementById('gTeam').value.trim(),
-    opponent: document.getElementById('gOpponent').value.trim(),
-    date:     document.getElementById('gDate').value.trim(),
-    guests: rows.map(r => ({
-      name:   r.querySelector('input[type="text"]')?.value.trim() || '',
-      drinks: r.getAttribute('data-drinks') || '{}',
-      food:   r.getAttribute('data-food')   || '{}',
-      paid:   r.getAttribute('data-paid')   || 'false',
-      tip:    r.getAttribute('data-tip')    || '0.00'
-    }))
-  };
-}
-
-function hasGameChanges() {
-  if (!gameSnapshot) return false;
-  const current = takeGameSnapshot();
-  if (current.team     !== gameSnapshot.team)     return true;
-  if (current.opponent !== gameSnapshot.opponent) return true;
-  if (current.date     !== gameSnapshot.date)     return true;
-  if (current.guests.length !== gameSnapshot.guests.length) return true;
-  for (let i = 0; i < current.guests.length; i++) {
-    const c = current.guests[i], s = gameSnapshot.guests[i];
-    if (c.name   !== s.name)   return true;
-    if (c.drinks !== s.drinks) return true;
-    if (c.food   !== s.food)   return true;
-    if (c.paid   !== s.paid)   return true;
-    if (c.tip    !== s.tip)    return true;
-  }
-  return false;
-}
-
-function collectGaeste() {
-  const gaeste = [];
-  document.querySelectorAll('#guestTableBody tr').forEach(row => {
-    const nm = row.querySelector('input[type="text"]')?.value.trim();
-    if (nm) gaeste.push({
-      name: nm,
-      getraenke: row.getAttribute('data-drinks') || '{}',
-      essen:     row.getAttribute('data-food')   || '{}',
-      paid:      row.getAttribute('data-paid') === 'true',
-      tip:       row.getAttribute('data-tip') || '0.00'
-    });
-  });
-  return gaeste;
-}
-
 document.getElementById('btnSaveGame').addEventListener('click', async () => {
   const team = document.getElementById('gTeam').value;
   const opp  = document.getElementById('gOpponent').value;
@@ -2538,13 +2361,6 @@ document.getElementById('btnSaveGame').addEventListener('click', async () => {
     btn.innerHTML = 'Spiel anlegen';
   }
 });
-
-
-function editGame(gameId) {
-  // Wird jetzt über QuickView gehandelt – direkt öffnen
-  openQuickView(gameId);
-}
-window.editGame = editGame;
 
 function deleteGame(gameId) {
   const g = games.find(x => x.id === gameId);
@@ -3342,8 +3158,6 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
 // ══════════════════════════════════════════════════════════════
 const MODALS = ['modalMember','modalEditBooking','modalHistory','modalSettle',
   'modalGuestSettle','modalWeekDetails','modalCreateAbrechnung','modalConfirm'];
-// Modals mit Verwerfen-Schutz werden separat behandelt:
-const GUARDED_MODALS = ['modalBooking', 'modalGame', 'modalGuestDrinks', 'modalGuestFood'];
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
@@ -3433,12 +3247,15 @@ window.addEventListener('load', () => {
     return;
   }
   // Falls Firebase noch nicht bereit ist, auf das Event warten:
-  if (!window.firebaseReady) {
-    window.addEventListener('firebaseReady', () => {
-      // onAuthStateChanged läuft asynchron – kurz warten
-      // damit currentFirebaseUser gesetzt werden kann
-    }, { once: true });
-  }
+	if (!window.firebaseReady) {
+	  window.addEventListener('firebaseReady', () => {
+		// onAuthStateChanged kümmert sich um den Rest
+		// Falls User bereits gesetzt wurde (race condition):
+		if (window.currentFirebaseUser && typeof window.initApp === 'function') {
+		  window.initApp();
+		}
+	  }, { once: true });
+	}
 });
 
 window.addEventListener('userLoggedIn', () => {
