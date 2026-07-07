@@ -272,6 +272,17 @@
   color: #111827 !important;
   border-color: #9ca3af !important;
 }
+.dark #dashRangeFrom,
+.dark #dashRangeTo {
+  background-color: #374151;
+  color: #f9fafb;
+  border-color: #4b5563;
+  color-scheme: dark;
+}
+.dark #btnDashRangeReset {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+}
   </style>
 </head>
 <body class="bg-gray-100 p-3 sm:p-6 transition-colors duration-200">
@@ -450,10 +461,18 @@
       <div id="gameNoData" class="text-center py-8 text-gray-500 hidden">Noch keine Heimspiele vorhanden.</div>
     </div>
     <div id="report-dashboard-wrap" class="hidden">
-      <div class="mb-4 flex items-center gap-3">
+      <div class="mb-4 flex flex-wrap items-center gap-3">
         <label class="text-sm font-medium text-gray-700">Jahr:</label>
         <div id="dashYearBtns" class="flex gap-2 flex-wrap"></div>
+        <span class="hidden sm:inline text-gray-300">|</span>
+        <label class="text-sm font-medium text-gray-700">Individueller Zeitraum:</label>
+        <input type="date" id="dashRangeFrom" class="border rounded p-1.5 text-sm">
+        <span class="text-gray-400 text-sm">bis</span>
+        <input type="date" id="dashRangeTo" class="border rounded p-1.5 text-sm">
+        <button id="btnDashRangeApply" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-indigo-700">Anwenden</button>
+        <button id="btnDashRangeReset" class="hidden bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-semibold hover:bg-gray-300">Zurücksetzen</button>
       </div>
+      <div id="dashRangeError" class="hidden mb-4 text-sm text-red-600 font-medium"></div>
       <div id="dashContent"></div>
     </div>
   </div>
@@ -2587,6 +2606,21 @@ document.getElementById('btnCloseWeekDetail').addEventListener('click', () => do
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════
 let dashYear = null;
+let dashRange = null; // { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' } | null — hat Vorrang vor dashYear
+
+function fmtDdMmYyyy(iso) {
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+// Prüft, ob ein Datum (YYYY-MM-DD) im aktuell gewählten Auswertungszeitraum liegt
+// (individueller Zeitraum hat Vorrang vor der Jahresauswahl)
+function isInDashPeriod(dateStr) {
+  if (!dateStr) return false;
+  if (dashRange) return dateStr >= dashRange.from && dateStr <= dashRange.to;
+  return dateStr.startsWith(dashYear);
+}
 
 function getDashYears() {
   const years = new Set();
@@ -2601,27 +2635,85 @@ function renderDashYearBtns() {
   if (!dashYear || !years.includes(dashYear)) dashYear = years[0];
   const c = document.getElementById('dashYearBtns');
   c.innerHTML = '';
-  years.forEach(y => {
+years.forEach(y => {
     const btn = document.createElement('button');
     btn.textContent = y;
     const dark = document.documentElement.classList.contains('dark');
 	btn.className = 'px-4 py-1.5 rounded font-semibold text-sm border transition-colors ' +
-	  (y === dashYear
+	  (y === dashYear && !dashRange
 		? 'year-active bg-gray-700 text-white border-gray-700'
 		: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100');
-    btn.addEventListener('click', () => { dashYear = y; renderDashboard(); });
+    btn.addEventListener('click', () => {
+      dashYear = y;
+      dashRange = null;
+      document.getElementById('dashRangeFrom').value = '';
+      document.getElementById('dashRangeTo').value = '';
+      document.getElementById('btnDashRangeReset').classList.add('hidden');
+      document.getElementById('dashRangeError').classList.add('hidden');
+      renderDashboard();
+    });
     c.appendChild(btn);
   });
 }
 
+// ── Individueller Zeitraum ──
+document.getElementById('btnDashRangeApply').addEventListener('click', () => {
+  const from = document.getElementById('dashRangeFrom').value;
+  const to   = document.getElementById('dashRangeTo').value;
+  const errBox = document.getElementById('dashRangeError');
+  errBox.classList.add('hidden');
+
+  if (!from || !to) {
+    errBox.textContent = 'Bitte Start- und Enddatum für den Zeitraum auswählen.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  if (from > to) {
+    errBox.textContent = 'Das Startdatum darf nicht nach dem Enddatum liegen.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  dashRange = { from, to };
+  document.getElementById('btnDashRangeReset').classList.remove('hidden');
+  renderDashboard();
+});
+
+document.getElementById('btnDashRangeReset').addEventListener('click', () => {
+  dashRange = null;
+  document.getElementById('dashRangeFrom').value = '';
+  document.getElementById('dashRangeTo').value = '';
+  document.getElementById('btnDashRangeReset').classList.add('hidden');
+  document.getElementById('dashRangeError').classList.add('hidden');
+  renderDashboard();
+});
+
 function renderDashboard() {
   renderDashYearBtns();
   const yr = dashYear;
-  if (!yr) { document.getElementById('dashContent').innerHTML = '<p class="text-gray-400">Keine Daten vorhanden.</p>'; return; }
+  if (!yr && !dashRange) { document.getElementById('dashContent').innerHTML = '<p class="text-gray-400">Keine Daten vorhanden.</p>'; return; }
+
+  // Anzeige-Bezeichnung des aktuell gewählten Zeitraums (Jahr oder individueller Zeitraum)
+  const periodLabel = dashRange ? `${fmtDdMmYyyy(dashRange.from)} – ${fmtDdMmYyyy(dashRange.to)}` : yr;
 
   // ── Daten aggregieren ──
-  const buchungen = Object.values(buchungenCache).filter(b => b.date?.startsWith(yr) && b.items?.length);
-  const spieleYr  = games.filter(g => g.date?.startsWith(yr) && g.gaeste?.length);
+  const buchungen = Object.values(buchungenCache).filter(b => isInDashPeriod(b.date) && b.items?.length);
+  const spieleYr  = games.filter(g => isInDashPeriod(g.date) && g.gaeste?.length);
+
+  // Sprechende Meldung, falls für den gewählten Zeitraum keine Daten vorliegen
+  if (!buchungen.length && !spieleYr.length) {
+    const periodText = dashRange
+      ? `im Zeitraum <strong>${fmtDdMmYyyy(dashRange.from)} – ${fmtDdMmYyyy(dashRange.to)}</strong>`
+      : `im Jahr <strong>${yr}</strong>`;
+    document.getElementById('dashContent').innerHTML = `
+      <div class="bg-white rounded-xl shadow p-10 text-center text-gray-500">
+        <div class="text-4xl mb-3">📭</div>
+        <p class="font-medium">Für diesen Zeitraum liegen keine Daten vor.</p>
+        <p class="text-sm mt-1">Es wurden keine Buchungen oder Heimspiele ${periodText} gefunden.</p>
+        <p class="text-sm mt-1">Bitte wähle ein anderes Jahr oder einen anderen Zeitraum.</p>
+      </div>`;
+    return;
+  }
 
   // Mitglieder-Umsatz nach Artikel
   const artMap = {};
@@ -2661,20 +2753,22 @@ function renderDashboard() {
   const totalEK  = memberEK + gastEK;
   const totalRoh = totalVK - totalEK;
 
-  // Umsatz nach KW (kombiniert)
+// Umsatz nach KW (kombiniert). Bei individuellem Zeitraum kann dieser mehrere
+  // (Kalender-)Jahre umfassen, daher wird das Jahr im Sortier-/Anzeigeschlüssel mitgeführt.
   const kwMap = {};
+  const kwKeyOf = (wk, iy) => dashRange ? `KW ${String(wk).padStart(2,'0')}/${String(iy).slice(-2)}` : `KW ${String(wk).padStart(2,'0')}`;
   buchungen.forEach(b => {
     const { week:wk, isoYear:iy } = getISOWeek(new Date(b.date));
-    if (String(iy) !== yr) return;
-    const k = `KW ${String(wk).padStart(2,'0')}`;
-    if (!kwMap[k]) kwMap[k] = { kw:wk, member:0, gast:0 };
+    if (!dashRange && String(iy) !== yr) return;
+    const k = kwKeyOf(wk, iy);
+    if (!kwMap[k]) kwMap[k] = { kw:wk, isoYear:iy, member:0, gast:0 };
     b.items.forEach(i => { kwMap[k].member += i.sellPrice * i.qty; });
   });
   spieleYr.forEach(g => {
     const { week:wk, isoYear:iy } = getISOWeek(new Date(g.date));
-    if (String(iy) !== yr) return;
-    const k = `KW ${String(wk).padStart(2,'0')}`;
-    if (!kwMap[k]) kwMap[k] = { kw:wk, member:0, gast:0 };
+    if (!dashRange && String(iy) !== yr) return;
+    const k = kwKeyOf(wk, iy);
+    if (!kwMap[k]) kwMap[k] = { kw:wk, isoYear:iy, member:0, gast:0 };
     g.gaeste.forEach(gst => {
       const dr = JSON.parse(gst.getraenke||'{}');
       const fo = JSON.parse(gst.essen||'{}');
@@ -2684,7 +2778,7 @@ function renderDashboard() {
       });
     });
   });
-  const kwSorted = Object.entries(kwMap).sort((a,b) => a[1].kw - b[1].kw);
+  const kwSorted = Object.entries(kwMap).sort((a,b) => (a[1].isoYear - b[1].isoYear) || (a[1].kw - b[1].kw));
 
   // Top-Artikel gesamt
   const allArt = {};
@@ -2854,8 +2948,8 @@ function renderDashboard() {
   const activeMembers = members.filter(m => m.isActive !== false);
   const openCount  = activeMembers.filter(m => (m.balance||0) > 0).length;
   const openTotal  = activeMembers.reduce((s,m) => s + (m.balance||0), 0);
-  const settledBk  = Object.values(buchungenCache).filter(b => b.settled && b.date?.startsWith(yr)).length;
-  const openBk     = Object.values(buchungenCache).filter(b => !b.settled && b.date?.startsWith(yr)).length;
+  const settledBk  = Object.values(buchungenCache).filter(b => b.settled && isInDashPeriod(b.date)).length;
+  const openBk     = Object.values(buchungenCache).filter(b => !b.settled && isInDashPeriod(b.date)).length;
 
   document.getElementById('dashContent').innerHTML = `
     <!-- KPI-Kacheln -->
@@ -2874,7 +2968,7 @@ function renderDashboard() {
 
     <!-- Umsatz nach KW -->
     <div style="background:${cardBg}" class="rounded-xl shadow p-4 mb-4">
-      <h3 class="font-semibold mb-3" style="color:${textColor}">📈 Umsatz nach Kalenderwoche (${yr})</h3>
+      <h3 class="font-semibold mb-3" style="color:${textColor}">📈 Umsatz nach Kalenderwoche (${periodLabel})</h3>
       ${kwSorted.length ? svgChart : `<p style="color:${subColor}" class="text-sm">Keine Daten.</p>`}
     </div>
 
@@ -2919,7 +3013,7 @@ function renderDashboard() {
 
     <!-- Top-Mitglieder nach Umsatz -->
     <div style="background:${cardBg}" class="rounded-xl shadow p-4 mb-4">
-      <h3 class="font-semibold mb-3" style="color:${textColor}">👤 Top-Mitglieder nach Umsatz (${yr})</h3>
+      <h3 class="font-semibold mb-3" style="color:${textColor}">👤 Top-Mitglieder nach Umsatz (${periodLabel})</h3>
       ${topMembers.length ? topMembers.map(m => {
         const mbr = members.find(x => x.id === m.id);
         const name = mbr ? memberDisplayName(mbr) : m.id;
@@ -2930,7 +3024,7 @@ function renderDashboard() {
 
     <!-- Artikel-Mengen-Tabelle -->
     <div style="background:${cardBg}" class="rounded-xl shadow p-4">
-      <h3 class="font-semibold mb-3" style="color:${textColor}">📋 Alle Artikel – Mengen & Umsatz (${yr})</h3>
+      <h3 class="font-semibold mb-3" style="color:${textColor}">📋 Alle Artikel – Mengen & Umsatz (${periodLabel})</h3>
       <div class="overflow-x-auto">
         <table class="w-full text-sm border-collapse" style="min-width:420px">
           <thead>
