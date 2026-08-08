@@ -709,7 +709,7 @@
       </div>
       <div class="mt-3 bg-blue-50 border border-blue-200 rounded p-3 flex items-center gap-3">
         <span class="text-2xl">💡</span>
-        <p class="text-blue-800 text-sm font-medium">Das Trinkgeld kommt direkt in die Sau 🐷</p>
+        <p id="gTipSauNote" class="text-blue-800 text-sm font-medium">Das Trinkgeld kommt direkt in die Sau 🐷</p>
       </div>
     </div>
     <div class="flex justify-end gap-2">
@@ -2137,6 +2137,11 @@ function qvOpenSettle(gameId, guestIdx) {
   document.getElementById('gSettleContent').innerHTML = html;
   document.getElementById('gTipInput').value = gst.tip || '0.00';
   setupTipBtns();
+
+  document.getElementById('gTipSauNote').textContent = showBoardFee
+    ? 'Trinkgeld und Boardgebühr kommt in die Sau 🐷'
+    : 'Das Trinkgeld kommt direkt in die Sau 🐷';
+
   if (showBoardFee) {
     document.getElementById('gBoardFeeCheck').addEventListener('change', (e) => {
       const t = drFoTotal + (e.target.checked ? BOARD_FEE_AMOUNT : 0);
