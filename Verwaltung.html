@@ -874,6 +874,19 @@ function populateTeamSelect() {
 
 const ABRECHNUNG_START = { week: 17, year: 2026 };
 
+// Boardgebühr: gilt nur für Heimspiele mit diesem Team, Betrag pro Gast
+const BOARD_FEE_TEAM   = 'Competition/Training';
+const BOARD_FEE_AMOUNT = 2.00;
+
+// true, wenn für diesen Gast die Boardgebühr anfällt (Team passt + nicht abgewählt)
+function guestHasBoardFee(g, gst) {
+  return g && g.team === BOARD_FEE_TEAM && gst && gst.boardgebuehr !== false;
+}
+// Betrag der Boardgebühr für diesen Gast (0, wenn nicht zutreffend)
+function calcGuestBoardFee(g, gst) {
+  return guestHasBoardFee(g, gst) ? BOARD_FEE_AMOUNT : 0;
+}
+
 // ══════════════════════════════════════════════════════════════
 // GLOBALER ZUSTAND
 // ══════════════════════════════════════════════════════════════
@@ -1830,11 +1843,13 @@ function qvShowGuestDetail(gameId, guestIdx) {
   }
   const drTotal = calcGuestTotal(gst, 'drink');
   const foTotal = calcGuestTotal(gst, 'food');
+  const bfTotal = calcGuestBoardFee(g, gst);
   html += `<div class="border-t pt-3 mt-2 text-sm space-y-1">
     <div class="flex justify-between"><span class="text-gray-600">Getränke:</span><span>${fEuro(drTotal)}</span></div>
     <div class="flex justify-between"><span class="text-gray-600">Essen:</span><span>${fEuro(foTotal)}</span></div>
+    ${bfTotal > 0 ? `<div class="flex justify-between"><span class="text-gray-600">Boardgebühr:</span><span>${fEuro(bfTotal)}</span></div>` : ''}
     ${tipVal > 0 ? `<div class="flex justify-between"><span class="text-gray-600">Trinkgeld:</span><span>${fEuro(tipVal)}</span></div>` : ''}
-    <div class="flex justify-between font-bold border-t pt-2"><span>Gesamt:</span><span>${fEuro(drTotal + foTotal)}</span></div>
+    <div class="flex justify-between font-bold border-t pt-2"><span>Gesamt:</span><span>${fEuro(drTotal + foTotal + bfTotal)}</span></div>
   </div>`;
   if (!html) html = '<p class="text-gray-400">Keine Bestellung erfasst.</p>';
   document.getElementById('guestDetailContent').innerHTML = html;
@@ -1879,7 +1894,8 @@ function renderQuickView(gameId) {
       const idx = originalIndices[si];
       const drTotal = calcGuestTotal(gst, 'drink');
       const foTotal = calcGuestTotal(gst, 'food');
-      const total   = drTotal + foTotal;
+      const bfTotal = calcGuestBoardFee(g, gst);
+      const total   = drTotal + foTotal + bfTotal;
       const tipVal  = parseFloat(gst.tip || 0);
 	  const tdBg = gst.paid ? 'style="background-color:inherit"' : '';
 	guestRows += `
@@ -1948,7 +1964,7 @@ async function qvAddGuest(gameId) {
   const g = games.find(x => x.id === gameId); if (!g) return;
   const name = prompt('Name des Gastes:');
   if (!name || !name.trim()) return;
-  const gaeste = [...(g.gaeste||[]), { name: name.trim(), getraenke:'{}', essen:'{}', paid:false, tip:'0.00' }];
+  const gaeste = [...(g.gaeste||[]), { name: name.trim(), getraenke:'{}', essen:'{}', paid:false, tip:'0.00', boardgebuehr:true }];
   try {
     await fbUpdate('spiele', gameId, { gaeste });
     showToast(`Gast „${name.trim()}" hinzugefügt.`);
@@ -1998,7 +2014,7 @@ document.getElementById('btnDoImportGuests').addEventListener('click', async () 
     .filter(n => n.length > 0);
   if (!names.length) { showToast('Bitte mindestens einen Namen eingeben.', 'error'); return; }
   const existing = g.gaeste || [];
-  const newGuests = names.map(name => ({ name, getraenke: '{}', essen: '{}', paid: false, tip: '0.00' }));
+  const newGuests = names.map(name => ({ name, getraenke: '{}', essen: '{}', paid: false, tip: '0.00', boardgebuehr: true }));
   const gaeste = [...existing, ...newGuests];
   const btn = document.getElementById('btnDoImportGuests');
   btn.disabled = true; btn.textContent = 'Importiere…';
@@ -2097,21 +2113,36 @@ function qvOpenSettle(gameId, guestIdx) {
 
   activeGuestRow = createQvProxy(gameId, guestIdx, 'settle');
 
-  const total = calcGuestTotal(gst, 'drink') + calcGuestTotal(gst, 'food');
+  const drFoTotal   = calcGuestTotal(gst, 'drink') + calcGuestTotal(gst, 'food');
+  const showBoardFee = g.team === BOARD_FEE_TEAM;
+  const bfChecked   = gst.boardgebuehr !== false; // Default: angehakt
+  const total = drFoTotal + (showBoardFee && bfChecked ? BOARD_FEE_AMOUNT : 0);
   let html = `<div class="bg-gray-50 p-3 rounded mb-3">
 	  <p class="text-sm text-gray-600 mb-1">Gast: <strong>${esc(gst.name)}</strong></p>
 	  <div class="bg-red-50 border border-red-200 rounded p-3 mt-2">
 		<p class="text-sm text-gray-600">Offener Betrag:</p>
-		<p class="text-2xl font-bold text-red-600">${total.toFixed(2)} €</p>
+		<p class="text-2xl font-bold text-red-600" id="gSettleTotalDisplay">${total.toFixed(2)} €</p>
 	  </div>`;
   const dr = JSON.parse(gst.getraenke||'{}');
   if (Object.keys(dr).length) { html+='<p class="mt-2 font-semibold">Getränke:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(dr)){const a=guestDrinkList.find(x=>x.name===n); html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; }
   const fo = JSON.parse(gst.essen||'{}');
   if (Object.keys(fo).length) { html+='<p class="mt-2 font-semibold">Essen:</p><ul class="list-disc ml-5 text-sm">'; for(const[n,q] of Object.entries(fo)){const a=guestFoodList.find(x=>x.name===n);  html+=`<li>${esc(n)}: ${q}× ${a?fEuro(a.preis*q):''}</li>`;} html+='</ul>'; }
+  if (showBoardFee) {
+    html += `<label class="mt-3 flex items-center gap-2 text-sm">
+      <input type="checkbox" id="gBoardFeeCheck" ${bfChecked ? 'checked' : ''}>
+      Boardgebühr (${fEuro(BOARD_FEE_AMOUNT)}) berechnen
+    </label>`;
+  }
   html += '</div>';
   document.getElementById('gSettleContent').innerHTML = html;
   document.getElementById('gTipInput').value = gst.tip || '0.00';
   setupTipBtns();
+  if (showBoardFee) {
+    document.getElementById('gBoardFeeCheck').addEventListener('change', (e) => {
+      const t = drFoTotal + (e.target.checked ? BOARD_FEE_AMOUNT : 0);
+      document.getElementById('gSettleTotalDisplay').textContent = t.toFixed(2) + ' €';
+    });
+  }
   document.getElementById('modalGuestSettle').classList.remove('hidden');
 }
 window.qvOpenSettle = qvOpenSettle;
@@ -2126,6 +2157,7 @@ function createQvProxy(gameId, guestIdx, mode) {
     store['data-food']   = g.gaeste[guestIdx].essen     || '{}';
     store['data-tip']    = g.gaeste[guestIdx].tip       || '0.00';
     store['data-paid']   = g.gaeste[guestIdx].paid ? 'true' : 'false';
+	store['data-boardgebuehr'] = g.gaeste[guestIdx].boardgebuehr !== false ? 'true' : 'false';
   }
   return {
     _gameId: gameId,
@@ -2153,6 +2185,7 @@ async function saveQvProxyToFirestore(gameId, guestIdx, store) {
   if (store['data-food']   !== undefined) gaeste[guestIdx].essen     = store['data-food'];
   if (store['data-tip']    !== undefined) gaeste[guestIdx].tip       = store['data-tip'];
   if (store['data-paid']   !== undefined) gaeste[guestIdx].paid      = store['data-paid'] === 'true';
+  if (store['data-boardgebuehr'] !== undefined) gaeste[guestIdx].boardgebuehr = store['data-boardgebuehr'] === 'true';
   // Status neu bestimmen
   const allPaid = gaeste.every(gs => gs.paid);
   const status  = allPaid ? 'ready' : 'draft';
@@ -2348,6 +2381,8 @@ function setupTipBtns() {
 document.getElementById('btnGuestPaid').addEventListener('click', () => {
   if (!activeGuestRow) return;
   const tip = parseFloat(document.getElementById('gTipInput').value) || 0;
+  const bfCheckEl = document.getElementById('gBoardFeeCheck');
+  if (bfCheckEl) activeGuestRow.setAttribute('data-boardgebuehr', bfCheckEl.checked ? 'true' : 'false');
   activeGuestRow.setAttribute('data-tip', tip.toFixed(2));
   activeGuestRow.setAttribute('data-paid', 'true');
   document.getElementById('modalGuestSettle').classList.add('hidden');
@@ -2374,6 +2409,17 @@ document.getElementById('btnGuestPaid').addEventListener('click', () => {
   updateFinalizeBtn();
 });
 document.getElementById('btnCloseGuestSettle').addEventListener('click', () => document.getElementById('modalGuestSettle').classList.add('hidden'));
+
+document.getElementById('gTeam').addEventListener('change', (e) => {
+  if (e.target.value === BOARD_FEE_TEAM) {
+    const oppInput = document.getElementById('gOpponent');
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2,'0');
+    const mm = String(today.getMonth()+1).padStart(2,'0');
+    const yyyy = today.getFullYear();
+    oppInput.value = `${dd}.${mm}.${yyyy}`;
+  }
+});
 
 document.getElementById('btnSaveGame').addEventListener('click', async () => {
   const team = document.getElementById('gTeam').value;
