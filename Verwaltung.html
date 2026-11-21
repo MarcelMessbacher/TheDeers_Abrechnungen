@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>Verwaltung The Deers – TSV Hirschaid</title>
-  <link rel="icon" type="image/svg" href="The Deers Logo nur Hirsch.svg">
+  <link rel="icon" type="image/svg+xml" href="The Deers Logo nur Hirsch.svg">
   <script src="https://cdn.tailwindcss.com"></script>
 	<script>
 	  tailwind.config = { darkMode: 'class' }
@@ -119,6 +119,27 @@
     .qbtn:hover { background:#f3f4f6; }
     .qdsp { font-weight:700;font-size:1.1rem;min-width:24px;text-align:center; }
 
+    /* Buchungs-Modal: Zeilenhöhe passt sich Bildschirmhöhe und Artikelanzahl an */
+    #modalBooking { --bk-vh: 1vh; }
+    @supports (height: 1dvh) { #modalBooking { --bk-vh: 1dvh; } }
+    #modalBooking .bk-table {
+      --bk-h: clamp(34px, calc((var(--bk-vh) * 90 - 340px) / var(--bk-rows, 12)), 60px);
+    }
+    #modalBooking .bk-table td {
+      height: var(--bk-h);
+      padding: 0 6px;
+      font-size: clamp(14px, calc(var(--bk-h) * 0.42), 20px);
+      line-height: 1.15;
+    }
+    #modalBooking .bk-table td[colspan] { height: auto; padding: 6px 8px; font-size: 14px; }
+    #modalBooking .bk-table .qbtn {
+      --bk-b: min(calc(var(--bk-h) * 0.8), 9vw, 46px);
+      width: var(--bk-b);
+      height: var(--bk-b);
+      font-size: calc(var(--bk-b) * 0.6);
+      flex-shrink: 0;
+    }
+    #modalBooking .bk-table .qdsp { font-size: inherit; min-width: 1.2em; }
     .tab-btn { transition:all .2s; }
     .tab-btn.active    { border-bottom:3px solid #374151;font-weight:700;color:#111827; }
     .tab-btn:not(.active){ color:#6b7280;border-bottom:3px solid transparent; }
@@ -146,6 +167,9 @@
   min-width: 0;
   transition: flex 0.2s;
 }
+  #games-quickview-col:not(.open) {
+    display: none;
+  }
 #games-quickview-col {
   width: 0;
   overflow: hidden;
@@ -367,7 +391,13 @@
 
   <!-- ═══════════ SEITE: HEIMSPIELE ═══════════ -->
 <div id="page-games" class="hidden page-wrap">
-  <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded mb-4 hover:bg-green-700 font-semibold">Neues Heimspiel</button>
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+    <button id="btnNewGame" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-semibold">Neues Heimspiel</button>
+    <div class="flex gap-2 w-full sm:w-auto sm:ml-auto">
+      <button onclick="openEinzelverkauf()" class="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-semibold">🛒 Einzelverkauf</button>
+      <button onclick="openEinzelHistory()" class="flex-1 sm:flex-none bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 font-semibold">📋 Verlauf</button>
+    </div>
+  </div>
   <div id="games-layout">
     <div id="games-list-col">
       <div id="gamesContainer"></div>
@@ -521,11 +551,11 @@
       <h2 class="text-xl font-bold mb-1">Buchung erfassen</h2>
       <p id="bookingLabel" class="text-sm text-gray-500 mb-4"></p>
       <div>
-		<table class="w-full text-sm border-collapse mb-3" style="table-layout:fixed">
+		<table class="bk-table w-full text-sm border-collapse mb-3" style="table-layout:fixed">
 		<colgroup>
-		  <col style="width:40%">
-		  <col style="width:20%">
-		  <col style="width:22%">
+		  <col style="width:36%">
+		  <col style="width:18%">
+		  <col style="width:28%">
 		  <col style="width:18%">
 		</colgroup>
 		<thead class="bg-gray-100">
@@ -728,6 +758,54 @@
   </div>
 </div>
 
+<!-- ════════════ MODAL – EINZELVERKAUF ════════════ -->
+<div id="modalEinzel" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-bold mb-4">Einzelverkauf</h2>
+    <div class="table-scroll">
+      <table class="w-full text-sm mb-4" style="min-width:360px">
+        <thead class="bg-gray-200"><tr><th class="p-2 border">Name</th><th class="p-2 border">Preis</th><th class="p-2 border">Anzahl</th><th class="p-2 border">Summe</th></tr></thead>
+        <tbody id="evBody"></tbody>
+      </table>
+    </div>
+    <div class="my-4">
+      <label class="block text-sm font-medium mb-1">Trinkgeld (€)</label>
+      <div class="flex items-center gap-2">
+        <button type="button" id="evTip50"  class="bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-2 rounded text-sm font-semibold">🪙 +0,50</button>
+        <button type="button" id="evTip100" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm font-semibold">🪙 +1,00</button>
+        <input type="number" id="evTipInput" class="border rounded flex-1 p-2 text-right" step="0.01" min="0" value="0.00">
+      </div>
+      <div class="mt-3 bg-blue-50 border border-blue-200 rounded p-3 flex items-center gap-3">
+        <span class="text-2xl">💡</span>
+        <p class="text-blue-800 text-sm font-medium">Das Trinkgeld kommt direkt in die Sau 🐷</p>
+      </div>
+    </div>
+        <div class="mb-4">
+      <div class="flex justify-between text-sm text-gray-600 mb-2 px-1">
+        <span>Artikel:</span><span id="evSum" class="font-semibold">0,00 €</span>
+      </div>
+      <div class="bg-red-50 border border-red-200 rounded p-3">
+        <p class="text-sm text-gray-600">Zu zahlen (inkl. Trinkgeld):</p>
+        <p id="evTotal" class="text-3xl font-bold text-red-600">0,00 €</p>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button id="btnEvPaid"   class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Bezahlt</button>
+      <button id="btnEvCancel" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalEinzelHistory" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+    <h2 class="text-xl font-bold mb-4">Einzelverkäufe</h2>
+    <div id="evHistory"></div>
+    <div class="flex justify-end mt-4">
+      <button onclick="document.getElementById('modalEinzelHistory').classList.add('hidden')" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════ MODALS – AUSWERTUNGEN ════════════ -->
 <div id="modalWeekDetails" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -742,15 +820,14 @@
 <div id="modalCreateAbrechnung" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md">
     <h2 class="text-xl font-bold mb-4">Abrechnung erstellen</h2>
-    <p class="text-sm text-gray-600 mb-4">Wähle die Kalenderwoche, für die eine Abrechnung erstellt werden soll.</p>
+    <p class="text-sm text-gray-600 mb-4">Wähle eine oder mehrere Kalenderwochen. Mehrere Wochen werden automatisch in der richtigen Reihenfolge abgerechnet.</p>
     <div class="mb-4">
-      <label class="block text-sm font-medium mb-1">Kalenderwoche</label>
-      <select id="abrechnungKWSelect" class="border rounded w-full p-2">
-        <option value="">– bitte wählen –</option>
-      </select>
+      <label class="block text-sm font-medium mb-1">Kalenderwochen</label>
+      <div id="abrechnungKWList" class="border rounded p-2 max-h-48 overflow-y-auto flex flex-col gap-1"></div>
+      <button type="button" id="btnSelectAllOpenWeeks" class="soft-btn soft-btn-blue mt-2">Alle offenen Wochen wählen</button>
     </div>
     <div class="mb-4">
-      <label class="block text-sm font-medium mb-1">Kontostand Vorwoche (€)</label>
+      <label class="block text-sm font-medium mb-1">Kontostand vor der ersten gewählten Woche (€)</label>
       <input type="number" id="abrechnungKontoVor" class="border rounded w-full p-2" step="0.01" value="0.00" placeholder="0.00">
       <p id="abrechnungKontoHint" class="text-xs text-blue-600 mt-1 hidden"></p>
     </div>
@@ -918,11 +995,14 @@ let reportData       = { member:{}, game:{} };
 let currentReportTab = 'members';
 let abrechnungen     = {};
 let buchungenCache   = {};
+let einzelverkaeufe  = [];
+let evHistoryLimit   = 50;
 
 let unsubMembers   = null;
 let unsubBuchungen = null;
 let unsubGames     = null;
 let unsubAbrech    = null;
+let unsubEinzel    = null;
 let listenersActive = false;
 
 // ══════════════════════════════════════════════════════════════
@@ -930,7 +1010,7 @@ let listenersActive = false;
 // ══════════════════════════════════════════════════════════════
 const fEuro = v => ((v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €');
 const fDate = s => { if(!s) return ''; const [y,m,d]=s.split('-'); return `${d}.${m}.${y}`; };
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const r2    = n => Math.round(n*100)/100;
 const esc   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -1153,6 +1233,15 @@ document.getElementById('btnQR').classList.remove('hidden');
       buildReportDataAndRender();
     }
   }, err => { console.error('Abrechnungen-Listener:', err); });
+  
+  unsubEinzel = FU().onSnapshot(FU().collection(DB(), 'einzelverkaeufe'), snap => {
+    einzelverkaeufe = [];
+    snap.forEach(d => einzelverkaeufe.push({ id: d.id, ...d.data() }));
+    renderEinzelHistory();
+    if (!document.getElementById('page-reports').classList.contains('hidden')) {
+      buildReportDataAndRender();
+    }
+  }, err => { console.error('Einzelverkäufe-Listener:', err); });
 }
 
 function stopRealtimeListeners() {
@@ -1160,6 +1249,7 @@ function stopRealtimeListeners() {
   if (unsubBuchungen) { unsubBuchungen(); unsubBuchungen = null; }
   if (unsubGames)     { unsubGames();     unsubGames = null; }
   if (unsubAbrech)    { unsubAbrech();    unsubAbrech = null; }
+    if (unsubEinzel)    { unsubEinzel();    unsubEinzel = null; }
   listenersActive = false;
   document.getElementById('syncIndicator').classList.add('hidden');
   document.getElementById('btnDarkMode').classList.add('hidden');
@@ -1430,9 +1520,9 @@ function buildBkGrids() {
       <td class="border p-2 text-right no-wrap">${fEuro(art.memberPrice)}</td>
       <td class="border p-1 text-center">
         <div class="flex items-center justify-center gap-1">
-          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',-1)">−</button>
-          <span class="qdsp" style="min-width:18px;font-size:1rem" id="bkqty-${id}">${qty}</span>
-          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',1)">+</button>
+          <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
+          <span class="qdsp" id="bkqty-${id}">${qty}</span>
+          <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
       <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
@@ -1449,14 +1539,17 @@ function buildBkGrids() {
       <td class="border p-2 text-right no-wrap">${fEuro(art.memberPrice)}</td>
       <td class="border p-1 text-center">
         <div class="flex items-center justify-center gap-1">
-          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',-1)">−</button>
-          <span class="qdsp" style="min-width:18px;font-size:1rem" id="bkqty-${id}">${qty}</span>
-          <button class="qbtn" style="width:22px;height:22px;font-size:14px" onclick="changeBkQty('${id}',1)">+</button>
+          <button class="qbtn" onclick="changeBkQty('${id}',-1)">−</button>
+          <span class="qdsp" id="bkqty-${id}">${qty}</span>
+          <button class="qbtn" onclick="changeBkQty('${id}',1)">+</button>
         </div>
       </td>
       <td class="border p-2 text-right no-wrap" id="bksum-${id}">${fEuro(art.memberPrice * qty)}</td>`;
-    fBody.appendChild(tr);
+        fBody.appendChild(tr);
   });
+
+  const rowCount = ARTICLES.filter(a => !a.inactive).length + 3;
+  document.querySelector('#modalBooking .bk-table').style.setProperty('--bk-rows', rowCount);
 }
 
 function changeBkQty(id, d) {
@@ -1926,7 +2019,7 @@ function renderQuickView(gameId) {
 <td class="border p-2 text-center" ${tdBg}>
   ${gst.paid
     ? `<button onclick="qvShowGuestDetail('${gameId}',${idx})" class="bg-slate-500 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs font-medium">📄 Details</button>`
-    : `<button onclick="qvOpenSettle('${gameId}',${idx})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium">Bezahlen</button>`}
+        : `<button onclick="qvOpenSettle('${gameId}',${idx})" title="Bezahlen" class="text-xl hover:scale-110 transition-transform">💰</button>`}
 </td>
 <td class="border p-2 text-center" ${tdBg}>
   ${!gst.paid ? `<button onclick="qvDeleteGuest('${gameId}',${idx})" class="text-red-500 hover:text-red-700 text-xl font-bold leading-none" title="Gast löschen">✕</button>` : ''}
@@ -2308,7 +2401,6 @@ async function qvFinalizeGame(gameId) {
       pdfData, pdfCreatedAt: new Date().toISOString()
     });
     closeQuickView();
-    openPdfDataUri(pdfData);
     showToast('Spiel final abgerechnet!');
   } catch(e) {
     console.error(e); showToast('Fehler beim Finalisieren.', 'error');
@@ -2532,6 +2624,177 @@ function deleteGame(gameId) {
 window.deleteGame = deleteGame;
 
 // ══════════════════════════════════════════════════════════════
+// EINZELVERKAUF
+// ══════════════════════════════════════════════════════════════
+const localDateStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+function einzelWeekKey(e) {
+  const { week, isoYear } = getISOWeek(new Date(e.date));
+  return `KW ${String(week).padStart(2,'0')}/${isoYear}`;
+}
+
+function updateEvTotals() {
+  let sum = 0;
+  document.querySelectorAll('#evBody .ev-row').forEach(tr => {
+    const q = Math.max(0, parseInt(tr.querySelector('.evQty').value) || 0);
+    sum += q * parseFloat(tr.dataset.preis);
+  });
+  const tip = Math.max(0, parseFloat(document.getElementById('evTipInput').value) || 0);
+  document.getElementById('evSum').textContent   = fEuro(r2(sum));
+  document.getElementById('evTotal').textContent = fEuro(r2(sum + tip));
+}
+
+// Dialog "Einzelverkauf" öffnen (Getränke + Essen der Gästeliste)
+function openEinzelverkauf() {
+  const tbody = document.getElementById('evBody');
+  tbody.innerHTML = '';
+  const addSection = (title, list, type) => {
+    const items = list.filter(x => !x.disabled);
+    if (!items.length) return;
+    const hr = document.createElement('tr');
+    hr.innerHTML = `<td colspan="4" class="p-2 border bg-gray-100 font-semibold text-sm">${title}</td>`;
+    tbody.appendChild(hr);
+    items.forEach(a => {
+      const preis = Number(a.preis) || 0;
+      const tr = document.createElement('tr');
+      tr.className = 'ev-row';
+      tr.dataset.name = a.name; tr.dataset.type = type; tr.dataset.preis = preis;
+      tr.innerHTML = `
+        <td class="p-2 border">${esc(a.name)}</td>
+        <td class="p-2 border text-right no-wrap">${preis.toFixed(2)} €</td>
+        <td class="p-2 border text-center"><div class="flex items-center justify-center gap-1">
+          <input type="number" min="0" value="0" class="evQty border rounded w-14 text-center p-1">
+          <button type="button" class="evPlus bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm">+1</button>
+        </div></td>
+        <td class="p-2 border evSum text-right no-wrap">0.00 €</td>`;
+      const inp = tr.querySelector('.evQty');
+      const upd = () => {
+        const q = Math.max(0, parseInt(inp.value) || 0);
+        tr.querySelector('.evSum').textContent = (preis * q).toFixed(2) + ' €';
+        updateEvTotals();
+      };
+      inp.addEventListener('input', upd);
+      tr.querySelector('.evPlus').addEventListener('click',  () => { inp.value = (parseInt(inp.value) || 0) + 1; upd(); });
+      tbody.appendChild(tr);
+    });
+  };
+  addSection('🥛 Getränke', guestDrinkList, 'drink');
+  addSection('🍴 Essen',    guestFoodList,  'food');
+  document.getElementById('evTipInput').value = '0.00';
+  updateEvTotals();
+  document.getElementById('modalEinzel').classList.remove('hidden');
+}
+window.openEinzelverkauf = openEinzelverkauf;
+
+document.getElementById('evTip50').addEventListener('click',  () => { const i = document.getElementById('evTipInput'); i.value = ((parseFloat(i.value) || 0) + 0.5).toFixed(2); updateEvTotals(); });
+document.getElementById('evTip100').addEventListener('click', () => { const i = document.getElementById('evTipInput'); i.value = ((parseFloat(i.value) || 0) + 1.0).toFixed(2); updateEvTotals(); });
+document.getElementById('evTipInput').addEventListener('input', updateEvTotals);
+document.getElementById('btnEvCancel').addEventListener('click', () => document.getElementById('modalEinzel').classList.add('hidden'));
+
+// Bezahlt: Einzelverkauf direkt speichern
+document.getElementById('btnEvPaid').addEventListener('click', async () => {
+  const items = [];
+  document.querySelectorAll('#evBody .ev-row').forEach(tr => {
+    const qty = Math.max(0, parseInt(tr.querySelector('.evQty').value) || 0);
+    if (!qty) return;
+    const art = ARTICLES.find(a => a.name === tr.dataset.name);
+    items.push({
+      name: tr.dataset.name, type: tr.dataset.type, qty,
+      sellPrice: parseFloat(tr.dataset.preis),
+      buyPrice:  art ? (Number(art.buyPrice) || 0) : 0
+    });
+  });
+  if (!items.length) { showToast('Bitte mindestens einen Artikel auswählen.', 'error'); return; }
+
+  const tip     = r2(Math.max(0, parseFloat(document.getElementById('evTipInput').value) || 0));
+  const totalVK = r2(items.reduce((s, i) => s + i.sellPrice * i.qty, 0));
+  const totalEK = r2(items.reduce((s, i) => s + i.buyPrice  * i.qty, 0));
+  const now     = new Date();
+
+  const btn = document.getElementById('btnEvPaid');
+  btn.disabled = true;
+  try {
+    await fbAdd('einzelverkaeufe', { date: localDateStr(now), timestamp: now.toISOString(), items, totalVK, totalEK, tip });
+    document.getElementById('modalEinzel').classList.add('hidden');
+    showToast(`Einzelverkauf gebucht: ${fEuro(totalVK + tip)}`);
+  } catch (e) {
+    console.error(e); showToast('Fehler beim Speichern.', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Historie (Inhalt des Dialogs "Einzelverkäufe")
+function renderEinzelHistory() {
+  const c = document.getElementById('evHistory');
+  if (!c) return;
+  const list = [...einzelverkaeufe].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  if (!list.length) { c.innerHTML = '<p class="text-gray-400 text-center py-6">Noch keine Einzelverkäufe.</p>'; return; }
+
+  const shown = list.slice(0, evHistoryLimit);
+  const rows = shown.map(e => {
+    const when = e.timestamp
+      ? new Date(e.timestamp).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+      : fDate(e.date);
+    const itemsTxt = (e.items || []).map(i => `${i.qty}× ${esc(i.name)}`).join(', ');
+    const wk = e.date ? einzelWeekKey(e) : '';
+    const locked = wk && abrechnungen[wk];
+    const tip = parseFloat(e.tip || 0);
+    return `<tr class="hover:bg-gray-50">
+      <td class="p-2 border text-sm no-wrap">${when}</td>
+      <td class="p-2 border text-sm">${itemsTxt}</td>
+      <td class="p-2 border text-sm text-right no-wrap">${fEuro(e.totalVK || 0)}</td>
+      <td class="p-2 border text-sm text-right no-wrap">${fEuro(tip)}</td>
+      <td class="p-2 border text-sm text-right no-wrap font-semibold">${fEuro((e.totalVK || 0) + tip)}</td>
+      <td class="p-2 border text-xs text-center text-gray-500 no-wrap">${wk}</td>
+      <td class="p-2 border text-center">${locked
+        ? '<span class="text-gray-300 text-xs" title="Woche bereits abgerechnet">🔒</span>'
+        : `<button onclick="deleteEinzelverkauf('${e.id}')" class="text-red-500 hover:text-red-700 text-xl font-bold leading-none" title="Löschen">✕</button>`}</td>
+    </tr>`;
+  }).join('');
+
+  c.innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse" style="min-width:560px">
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="p-2 border text-left">Datum / Uhrzeit</th>
+            <th class="p-2 border text-left">Artikel</th>
+            <th class="p-2 border text-right">Summe</th>
+            <th class="p-2 border text-right">Trinkgeld</th>
+            <th class="p-2 border text-right">Gesamt</th>
+            <th class="p-2 border text-center">KW</th>
+            <th class="p-2 border"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${list.length > shown.length
+      ? `<div class="text-center mt-3"><button onclick="evHistoryLimit+=50;renderEinzelHistory()" class="soft-btn soft-btn-blue">Mehr anzeigen (${list.length - shown.length} weitere)</button></div>`
+      : ''}`;
+}
+window.renderEinzelHistory = renderEinzelHistory;
+
+function openEinzelHistory() {
+  evHistoryLimit = 50;
+  renderEinzelHistory();
+  document.getElementById('modalEinzelHistory').classList.remove('hidden');
+}
+window.openEinzelHistory = openEinzelHistory;
+
+// Löschen (nur solange die Woche noch nicht abgerechnet ist)
+function deleteEinzelverkauf(id) {
+  const e = einzelverkaeufe.find(x => x.id === id); if (!e) return;
+  if (e.date && abrechnungen[einzelWeekKey(e)]) { showToast('Diese Woche ist bereits abgerechnet.', 'warning'); return; }
+  showConfirm('Diesen Einzelverkauf wirklich löschen?', async () => {
+    try { await fbDelete('einzelverkaeufe', id); showToast('Einzelverkauf gelöscht.'); }
+    catch (err) { console.error(err); showToast('Fehler beim Löschen.', 'error'); }
+  });
+}
+window.deleteEinzelverkauf = deleteEinzelverkauf;
+
+// ══════════════════════════════════════════════════════════════
 // AUSWERTUNGEN
 // ══════════════════════════════════════════════════════════════
 function buildReportDataAndRender() {
@@ -2566,6 +2829,25 @@ function buildReportDataAndRender() {
       for (const [n,q] of Object.entries(fo)) { const art=ARTICLES.find(a=>a.name===n); if(art){ w.essenVK+=art.guestPrice*q; w.gesamtVK+=art.guestPrice*q; w.gesamtEK+=art.buyPrice*q; if(!w.foodDetail[n]) w.foodDetail[n]={qty:0,vk:0,ek:0}; w.foodDetail[n].qty+=q; w.foodDetail[n].vk+=art.guestPrice*q; w.foodDetail[n].ek+=art.buyPrice*q; } }
       w.trinkgeld += parseFloat(gst.tip||0);
     });
+  });
+
+  // Einzelverkäufe zählen wie Gäste-Verkäufe der jeweiligen KW (inkl. Trinkgeld)
+  einzelverkaeufe.forEach(e => {
+    if (!e.date || !e.items?.length) return;
+    const { week:wk, isoYear:yr } = getISOWeek(new Date(e.date));
+    const key = `KW ${String(wk).padStart(2,'0')}/${yr}`;
+    if (!gameWeeks[key]) gameWeeks[key] = { week:wk, year:yr, sortDate:new Date(e.date), spiele:[], drinksDetail:{}, foodDetail:{}, getraenkeVK:0, essenVK:0, gesamtVK:0, gesamtEK:0, trinkgeld:0 };
+    const w = gameWeeks[key];
+    w.einzelCount = (w.einzelCount || 0) + 1;
+    e.items.forEach(it => {
+      const vk = it.sellPrice * it.qty, ek = it.buyPrice * it.qty;
+      const det = it.type === 'drink' ? w.drinksDetail : w.foodDetail;
+      if (it.type === 'drink') w.getraenkeVK += vk; else w.essenVK += vk;
+      w.gesamtVK += vk; w.gesamtEK += ek;
+      if (!det[it.name]) det[it.name] = { qty:0, vk:0, ek:0 };
+      det[it.name].qty += it.qty; det[it.name].vk += vk; det[it.name].ek += ek;
+    });
+    w.trinkgeld += parseFloat(e.tip || 0);
   });
 
   reportData = { member: memberWeeks, game: gameWeeks };
@@ -2793,6 +3075,7 @@ function showGameWeekDetails(key) {
   let html = `<h3 class="font-semibold mb-2">Spiele:</h3><div class="bg-gray-50 rounded p-3 mb-3">`;
   d.spiele.forEach(s => { html += `<div class="mb-1"><strong>${esc(s.team)}</strong> vs <strong>${esc(s.opponent)}</strong> <span class="text-gray-400 text-sm">(${fDate(s.date)})</span></div>`; });
   html += '</div>';
+  if (d.einzelCount) html += `<div class="text-sm text-gray-600 mb-3">➕ ${d.einzelCount} Einzelverkauf${d.einzelCount !== 1 ? 'e' : ''} in den Mengen unten enthalten</div>`;
   if (Object.keys(d.drinksDetail).length) { html+='<h3 class="font-semibold mb-2 mt-2">Getränke:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:400px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.drinksDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
   if (Object.keys(d.foodDetail).length)   { html+='<h3 class="font-semibold mb-2 mt-2">Essen:</h3><div class="table-scroll"><table class="w-full text-sm border-collapse mb-3" style="min-width:280px"><thead class="bg-gray-100"><tr><th class="p-2 border text-left">Artikel</th><th class="p-2 border text-center">Menge</th><th class="p-2 border text-right">VK</th></tr></thead><tbody>'; Object.entries(d.foodDetail).forEach(([n,v])=>{ html+=`<tr><td class="p-2 border">${esc(n)}</td><td class="p-2 border text-center">${v.qty}</td><td class="p-2 border text-right">${fEuro(v.vk)}</td></tr>`; }); html+='</tbody></table></div>'; }
   document.getElementById('wkDetailContent').innerHTML = html;
@@ -2825,6 +3108,7 @@ function getDashYears() {
   const years = new Set();
   Object.values(buchungenCache).forEach(b => { if (b.date) years.add(b.date.slice(0,4)); });
   games.forEach(g => { if (g.date) years.add(g.date.slice(0,4)); });
+    einzelverkaeufe.forEach(e => { if (e.date) years.add(e.date.slice(0,4)); });
   return [...years].sort((a,b) => b-a);
 }
 
@@ -2898,9 +3182,10 @@ function renderDashboard() {
   // ── Daten aggregieren ──
   const buchungen = Object.values(buchungenCache).filter(b => isInDashPeriod(b.date) && b.items?.length);
   const spieleYr  = games.filter(g => isInDashPeriod(g.date) && g.gaeste?.length);
+    const einzelPeriod = einzelverkaeufe.filter(e => isInDashPeriod(e.date) && e.items?.length);
 
   // Sprechende Meldung, falls für den gewählten Zeitraum keine Daten vorliegen
-  if (!buchungen.length && !spieleYr.length) {
+  if (!buchungen.length && !spieleYr.length && !einzelPeriod.length) {
     const periodText = dashRange
       ? `im Zeitraum <strong>${fmtDdMmYyyy(dashRange.from)} – ${fmtDdMmYyyy(dashRange.to)}</strong>`
       : `im Jahr <strong>${yr}</strong>`;
@@ -2948,6 +3233,18 @@ function renderDashboard() {
     });
   });
 
+  einzelPeriod.forEach(e => {
+    gastTip += parseFloat(e.tip || 0);
+    e.items.forEach(it => {
+      if (!gastArtMap[it.name]) gastArtMap[it.name] = { name:it.name, type:it.type, qty:0, vk:0, ek:0 };
+      gastArtMap[it.name].qty += it.qty;
+      gastArtMap[it.name].vk  += it.sellPrice * it.qty;
+      gastArtMap[it.name].ek  += it.buyPrice  * it.qty;
+      gastVK += it.sellPrice * it.qty;
+      gastEK += it.buyPrice  * it.qty;
+    });
+  });
+
   const totalVK  = memberVK + gastVK;
   const totalEK  = memberEK + gastEK;
   const totalRoh = totalVK - totalEK;
@@ -2977,6 +3274,15 @@ function renderDashboard() {
       });
     });
   });
+
+  einzelPeriod.forEach(e => {
+    const { week:wk, isoYear:iy } = getISOWeek(new Date(e.date));
+    if (!dashRange && String(iy) !== yr) return;
+    const k = kwKeyOf(wk, iy);
+    if (!kwMap[k]) kwMap[k] = { kw:wk, isoYear:iy, member:0, gast:0 };
+    e.items.forEach(it => { kwMap[k].gast += it.sellPrice * it.qty; });
+  });  
+  
   const kwSorted = Object.entries(kwMap).sort((a,b) => (a[1].isoYear - b[1].isoYear) || (a[1].kw - b[1].kw));
 
   // Top-Artikel gesamt
@@ -3009,6 +3315,51 @@ function renderDashboard() {
   // Gast vs Mitglied Split
   const guestPct  = Math.round(gastVK / (totalVK || 1) * 100);
   const memberPct = 100 - guestPct;
+  
+    // ── Verkaufte Menge pro Artikel nach Monat ──
+  const MONTH_NAMES = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+  // Spalten: Monate des Jahres bzw. alle Monate des individuellen Zeitraums
+  const monthKeys = [];
+  if (dashRange) {
+    let [cy, cm] = dashRange.from.split('-').map(Number);
+    const [ey, em] = dashRange.to.split('-').map(Number);
+    while (cy < ey || (cy === ey && cm <= em)) {
+      monthKeys.push(`${cy}-${String(cm).padStart(2,'0')}`);
+      cm++; if (cm > 12) { cm = 1; cy++; }
+    }
+  } else {
+    for (let m = 1; m <= 12; m++) monthKeys.push(`${yr}-${String(m).padStart(2,'0')}`);
+  }
+  const monthLabel = mk => {
+    const [y, m] = mk.split('-');
+    return MONTH_NAMES[parseInt(m, 10) - 1] + (dashRange ? ' ' + y : '');
+  };
+
+  // Mengen je Artikel und Monat (Mitglieder-Buchungen + Gast-Verkäufe)
+  const monthArt = {};
+  const addMonthQty = (name, type, dateStr, qty) => {
+    const mk = String(dateStr).slice(0, 7);
+    if (!monthArt[name]) monthArt[name] = { name, type, perMonth: {}, total: 0 };
+    monthArt[name].perMonth[mk] = (monthArt[name].perMonth[mk] || 0) + qty;
+    monthArt[name].total += qty;
+  };
+  buchungen.forEach(b => b.items.forEach(i => addMonthQty(i.name, i.type, b.date, i.qty)));
+  spieleYr.forEach(g => g.gaeste.forEach(gst => {
+    const dr = JSON.parse(gst.getraenke || '{}');
+    const fo = JSON.parse(gst.essen || '{}');
+    [...Object.entries(dr), ...Object.entries(fo)].forEach(([n, q]) => {
+      const art = ARTICLES.find(a => a.name === n); if (!art) return;
+      addMonthQty(n, art.type, g.date, q);
+    });
+  }));
+  
+  einzelPeriod.forEach(e => e.items.forEach(it => addMonthQty(it.name, it.type, e.date, it.qty)));
+  
+  const monthRows = Object.values(monthArt).filter(a => a.total > 0).sort((a, b) => b.total - a.total);
+  const monthTotals = {};
+  monthKeys.forEach(mk => { monthTotals[mk] = monthRows.reduce((s, a) => s + (a.perMonth[mk] || 0), 0); });
+  const monthGrand = monthRows.reduce((s, a) => s + a.total, 0);
 
   // ── HTML aufbauen ──
   const dark = document.documentElement.classList.contains('dark');
@@ -3220,6 +3571,37 @@ function renderDashboard() {
           `<div class="text-xs mb-3 -mt-1" style="color:${subColor}">${m.bk} Buchung${m.bk!==1?'en':''}</div>`;
       }).join('') : `<p style="color:${subColor}" class="text-sm">Keine Daten.</p>`}
     </div>
+	
+	    <!-- Verkaufte Artikel nach Monat -->
+    <div style="background:${cardBg}" class="rounded-xl shadow p-4 mb-4">
+      <h3 class="font-semibold mb-3" style="color:${textColor}">📅 Verkaufte Artikel nach Monat (${periodLabel})</h3>
+      ${monthRows.length ? `
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse" style="min-width:${220 + monthKeys.length * 64}px">
+          <thead>
+            <tr style="background:${barBg}">
+              <th class="p-2 border text-left" style="border-color:${barBg};color:${textColor}">Artikel</th>
+              ${monthKeys.map(mk => `<th class="p-2 border text-center no-wrap" style="border-color:${barBg};color:${textColor}">${monthLabel(mk)}</th>`).join('')}
+              <th class="p-2 border text-center" style="border-color:${barBg};color:${textColor}">Summe</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${monthRows.map(a => `<tr>
+              <td class="p-2 border no-wrap" style="border-color:${barBg};color:${textColor}">${a.type==='drink'?'🥛':'🍴'} ${esc(a.name)}</td>
+              ${monthKeys.map(mk => { const q = a.perMonth[mk] || 0; return `<td class="p-2 border text-center" style="border-color:${barBg};color:${q ? textColor : subColor}">${q || '–'}</td>`; }).join('')}
+              <td class="p-2 border text-center font-semibold" style="border-color:${barBg};color:${textColor}">${a.total}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="background:${barBg}" class="font-bold">
+              <td class="p-2 border" style="border-color:${barBg};color:${textColor}">GESAMT</td>
+              ${monthKeys.map(mk => `<td class="p-2 border text-center" style="border-color:${barBg};color:${textColor}">${monthTotals[mk] || '–'}</td>`).join('')}
+              <td class="p-2 border text-center" style="border-color:${barBg};color:${textColor}">${monthGrand}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>` : `<p style="color:${subColor}" class="text-sm">Keine Daten.</p>`}
+    </div>
 
     <!-- Artikel-Mengen-Tabelle -->
     <div style="background:${cardBg}" class="rounded-xl shadow p-4">
@@ -3314,36 +3696,41 @@ document.getElementById('btnExportGoBD').addEventListener('click', () => {
 // ══════════════════════════════════════════════════════════════
 // ABRECHNUNG ERSTELLEN
 // ══════════════════════════════════════════════════════════════
-document.getElementById('btnCreateAbrechnung').addEventListener('click', () => {
-  const allKeys = new Set([...Object.keys(reportData.member||{}), ...Object.keys(reportData.game||{})]);
-  if (!allKeys.size) { showToast('Keine Daten für eine Abrechnung vorhanden.', 'warning'); return; }
-  const sel = document.getElementById('abrechnungKWSelect');
-  sel.innerHTML = '<option value="">– bitte wählen –</option>';
-  const startSortKey = ABRECHNUNG_START.year * 100 + ABRECHNUNG_START.week;
-  [...allKeys].sort().reverse().forEach(key => {
-    const m = key.match(/KW\s+(\d+)\/(\d+)/);
-    if (m && (parseInt(m[2])*100 + parseInt(m[1])) < startSortKey) return;
-    const opt = document.createElement('option');
-    opt.value = key; opt.textContent = key + (abrechnungen[key] ? ' ✓ (bereits abgerechnet)' : '');
-    if (abrechnungen[key]) opt.disabled = true;
-    sel.appendChild(opt);
-  });
-  document.getElementById('abrechnungHint').classList.add('hidden');
-  const unprocessed = [...allKeys].sort().reverse().find(k => !abrechnungen[k]);
-  if (unprocessed) { sel.value = unprocessed; sel.dispatchEvent(new Event('change')); }
-  document.getElementById('modalCreateAbrechnung').classList.remove('hidden');
-});
-document.getElementById('btnCancelAbrechnung').addEventListener('click', () => document.getElementById('modalCreateAbrechnung').classList.add('hidden'));
 
-document.getElementById('abrechnungKWSelect').addEventListener('change', () => {
-  const key  = document.getElementById('abrechnungKWSelect').value;
+// Sortierschlüssel einer KW ("KW 21/2026" -> 202621)
+const abrKwSort = k => { const m = k.match(/KW\s+(\d+)\/(\d+)/); return m ? parseInt(m[2])*100 + parseInt(m[1]) : 0; };
+
+// Alle Wochen mit Daten ab Abrechnungsstart, älteste zuerst
+function getAbrechnungWeekKeys() {
+  const allKeys = new Set([...Object.keys(reportData.member||{}), ...Object.keys(reportData.game||{})]);
+  const startSortKey = ABRECHNUNG_START.year * 100 + ABRECHNUNG_START.week;
+  return [...allKeys].filter(k => abrKwSort(k) >= startSortKey).sort((a,b) => abrKwSort(a) - abrKwSort(b));
+}
+
+// Gewählte Wochen, chronologisch sortiert
+function getSelectedAbrechnungWeeks() {
+  return [...document.querySelectorAll('#abrechnungKWList input[type=checkbox]:checked')]
+    .map(i => i.value).sort((a,b) => abrKwSort(a) - abrKwSort(b));
+}
+
+// Offene Wochen, die vor der letzten gewählten Woche liegen, aber nicht gewählt sind
+function findMissingEarlierWeeks(selected) {
+  if (!selected.length) return [];
+  const last = abrKwSort(selected[selected.length - 1]);
+  return getAbrechnungWeekKeys().filter(k => abrKwSort(k) < last && !abrechnungen[k] && !selected.includes(k));
+}
+
+// Kontostand-Vorschlag + Reihenfolge-Hinweis aktualisieren
+function updateAbrechnungKontoHint() {
   const hint = document.getElementById('abrechnungKontoHint');
-  if (!key) { hint.classList.add('hidden'); return; }
-  const kwSortKey = k => { const m=k.match(/KW\s+(\d+)\/(\d+)/); return m ? parseInt(m[2])*100+parseInt(m[1]) : 0; };
-  const selectedSort   = kwSortKey(key);
-  const priorSettled   = Object.values(abrechnungen)
-    .filter(a => a.weekKey && kwSortKey(a.weekKey) < selectedSort && a.kontoNeu !== undefined)
-    .sort((a,b) => kwSortKey(b.weekKey) - kwSortKey(a.weekKey));
+  const warn = document.getElementById('abrechnungHint');
+  const selected = getSelectedAbrechnungWeeks();
+  if (!selected.length) { hint.classList.add('hidden'); warn.classList.add('hidden'); return; }
+
+  const firstSort = abrKwSort(selected[0]);
+  const priorSettled = Object.values(abrechnungen)
+    .filter(a => a.weekKey && abrKwSort(a.weekKey) < firstSort && a.kontoNeu !== undefined)
+    .sort((a,b) => abrKwSort(b.weekKey) - abrKwSort(a.weekKey));
   if (priorSettled.length > 0) {
     const prev = priorSettled[0];
     document.getElementById('abrechnungKontoVor').value = prev.kontoNeu.toFixed(2);
@@ -3352,18 +3739,55 @@ document.getElementById('abrechnungKWSelect').addEventListener('change', () => {
     document.getElementById('abrechnungKontoVor').value = '0.00';
     hint.textContent = 'Keine Vorwoche gefunden – bitte Startwert eingeben.';
   }
+  if (selected.length > 1) hint.textContent += ` – danach wird der Kontostand über ${selected.length} Wochen automatisch fortgeschrieben.`;
   hint.classList.remove('hidden');
+
+  const missing = findMissingEarlierWeeks(selected);
+  if (missing.length) {
+    warn.textContent = `Bitte zuerst mit abrechnen: ${missing.join(', ')} (der Kontostand baut auf der Vorwoche auf).`;
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+}
+
+document.getElementById('btnCreateAbrechnung').addEventListener('click', () => {
+  const keys = getAbrechnungWeekKeys();
+  if (!keys.length) { showToast('Keine Daten für eine Abrechnung vorhanden.', 'warning'); return; }
+  const list = document.getElementById('abrechnungKWList');
+  list.innerHTML = '';
+    [...keys].reverse().forEach(key => {
+    const done = !!abrechnungen[key];
+    const row = document.createElement('label');
+    row.className = 'flex items-center gap-2 text-sm' + (done ? ' text-gray-400' : '');
+    row.innerHTML = `<input type="checkbox" value="${esc(key)}" ${done ? 'disabled' : ''}> <span>${esc(key)}${done ? ' ✓ (bereits abgerechnet)' : ''}</span>`;
+    list.appendChild(row);
+  });
+  document.getElementById('abrechnungHint').classList.add('hidden');
+  document.getElementById('abrechnungKontoHint').classList.add('hidden');
+  // Älteste offene Woche vorauswählen
+  const openBoxes = list.querySelectorAll('input[type=checkbox]:not(:disabled)');
+  const oldestOpen = openBoxes[openBoxes.length - 1];
+  if (oldestOpen) { oldestOpen.checked = true; }
+  updateAbrechnungKontoHint();
+  document.getElementById('modalCreateAbrechnung').classList.remove('hidden');
 });
 
-document.getElementById('btnDoAbrechnung').addEventListener('click', async () => {
-  const weekKey = document.getElementById('abrechnungKWSelect').value;
-  if (!weekKey) { showToast('Bitte eine Kalenderwoche wählen.', 'error'); return; }
-  if (abrechnungen[weekKey]) { showToast('Diese KW wurde bereits abgerechnet.', 'warning'); return; }
+document.getElementById('abrechnungKWList').addEventListener('change', updateAbrechnungKontoHint);
+
+document.getElementById('btnSelectAllOpenWeeks').addEventListener('click', () => {
+  document.querySelectorAll('#abrechnungKWList input[type=checkbox]:not(:disabled)').forEach(cb => cb.checked = true);
+  updateAbrechnungKontoHint();
+});
+
+document.getElementById('btnCancelAbrechnung').addEventListener('click', () => document.getElementById('modalCreateAbrechnung').classList.add('hidden'));
+
+// Erstellt + speichert die Abrechnung einer Woche. Gibt {weekKey, kontoNeu, pdfData} zurück, bei Problemen null.
+async function createAbrechnungForWeek(weekKey, kontoVor) {
+  if (abrechnungen[weekKey]) { showToast(`${weekKey} wurde bereits abgerechnet.`, 'warning'); return null; }
   const mw = reportData.member[weekKey] || null;
   const gw = reportData.game[weekKey]   || null;
-  if (!mw && !gw) { showToast('Keine Daten für diese KW.', 'warning'); return; }
-
-  const kontoVor = parseFloat(document.getElementById('abrechnungKontoVor').value) || 0;
+  if (!mw && !gw) { showToast(`Keine Daten für ${weekKey}.`, 'warning'); return null; }
   const [kwStr, yrStr] = weekKey.replace('KW ','').split('/');
   const kwNum = parseInt(kwStr), kwYr = parseInt(yrStr);
   const range = kwRange(kwNum, kwYr);
@@ -3436,21 +3860,79 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
   const existingStatus = abrechnungen[weekKey]?.status;
   const abrData = { weekKey, week:kwNum, year:kwYr, kwRange:range.label, kontoVor, kontoNeu, gesamtRoh, gesamtUmsatz, pdfData, createdAt:new Date().toISOString(), status: existingStatus || 'abgerechnet' };
 
+  const existingId = abrechnungen[weekKey]?.id;
+  if (existingId) { await fbUpdate('abrechnungen', existingId, abrData); }
+  else            { await fbAdd('abrechnungen', abrData); }
+  return { weekKey, kontoNeu, pdfData };
+}
+
+// PDF in einem bereits geöffneten Tab anzeigen (Fallback: normales Öffnen/Download)
+function showPdfInWindow(win, dataUri) {
+  if (!win || win.closed) { openPdfDataUri(dataUri); return; }
   try {
-    const existingId = abrechnungen[weekKey]?.id;
-    if (existingId) { await fbUpdate('abrechnungen', existingId, abrData); }
-    else            { await fbAdd('abrechnungen', abrData); }
+    const bytes = atob(dataUri.split(',')[1]);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+    win.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    console.error('PDF öffnen fehlgeschlagen:', e);
+    win.close();
+    showToast('PDF konnte nicht geöffnet werden.', 'error');
+  }
+}
+
+document.getElementById('btnDoAbrechnung').addEventListener('click', async () => {
+  const selected = getSelectedAbrechnungWeeks();   // chronologisch aufsteigend
+  if (!selected.length) { showToast('Bitte mindestens eine Kalenderwoche wählen.', 'error'); return; }
+
+  const missing = findMissingEarlierWeeks(selected);
+  if (missing.length) {
+    showToast(`Bitte zuerst mit abrechnen: ${missing.join(', ')}`, 'warning');
+    return;
+  }
+
+  // Tabs sofort (noch im Klick) öffnen, sonst blockt der Popup-Blocker
+  const wins = selected.map(() => window.open('', '_blank'));
+
+  const btn = document.getElementById('btnDoAbrechnung');
+  const btnText = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Erstelle…';
+
+  let kontoVor = parseFloat(document.getElementById('abrechnungKontoVor').value) || 0;
+  let doneCount = 0, lastKonto = null;
+  try {
+    for (let i = 0; i < selected.length; i++) {
+      const res = await createAbrechnungForWeek(selected[i], kontoVor);
+      if (!res) break;                      // Abbruch, Reihenfolge nicht weiterführen
+      kontoVor = res.kontoNeu;              // Kontostand an die nächste Woche weitergeben
+      lastKonto = res.kontoNeu;
+      doneCount++;
+      showPdfInWindow(wins[i], res.pdfData);
+    }
+  } catch (e) {
+    console.error(e);
+    showToast('Fehler beim Speichern der Abrechnung.', 'error');
+  } finally {
+    // nicht verwendete Tabs wieder schließen
+    for (let i = doneCount; i < wins.length; i++) { try { wins[i] && wins[i].close(); } catch(_){} }
+    btn.disabled = false; btn.innerHTML = btnText;
+  }
+
+  if (doneCount > 0) {
     document.getElementById('modalCreateAbrechnung').classList.add('hidden');
-    openPdfDataUri(pdfData);
-    showToast(`Abrechnung ${weekKey} erstellt! Neuer Kontostand: ${kontoNeu.toFixed(2)} €`);
-  } catch(e) { console.error(e); showToast('Fehler beim Speichern der Abrechnung.', 'error'); }
+    showToast(doneCount === 1
+      ? `Abrechnung ${selected[0]} erstellt! Neuer Kontostand: ${lastKonto.toFixed(2)} €`
+      : `${doneCount} Abrechnungen erstellt! Neuer Kontostand: ${lastKonto.toFixed(2)} €`);
+  }
 });
 
 // ══════════════════════════════════════════════════════════════
 // ESC + MODAL-HINTERGRUND SCHLIEßEN
 // ══════════════════════════════════════════════════════════════
 const MODALS = ['modalMember','modalEditBooking','modalHistory','modalSettle',
-  'modalGuestSettle','modalWeekDetails','modalCreateAbrechnung','modalConfirm','modalReportsAccess'];
+  'modalGuestSettle','modalWeekDetails','modalCreateAbrechnung','modalConfirm','modalReportsAccess','modalEinzel','modalEinzelHistory'];
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
