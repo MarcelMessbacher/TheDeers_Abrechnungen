@@ -60,6 +60,8 @@
     window.dispatchEvent(new Event('firebaseReady'));
   </script>
   <style>
+	.overdue-frame { border: 3px solid #dc2626 !important; box-shadow: 0 0 0 4px rgba(220,38,38,.35), 0 0 28px 8px rgba(220,38,38,.6) !important; }
+	.overdue-banner { background:#fef2f2; color:#b91c1c; border:2px solid #dc2626; }
     .modal-bg { background-image:url('The Deers Logo dunkelgrau-hellgrau.svg');
       background-repeat:no-repeat;background-position:center;background-size:contain;
       background-attachment:fixed;position:relative; }
@@ -550,6 +552,10 @@
     <div class="modal-inner">
       <h2 class="text-xl font-bold mb-1">Buchung erfassen</h2>
       <p id="bookingLabel" class="text-sm text-gray-500 mb-4"></p>
+	  <div id="bkOverdueBanner" class="overdue-banner hidden flex items-start gap-2 rounded p-3 mb-4 font-semibold">
+        <span class="text-2xl leading-none">⚠️</span>
+        <span id="bkOverdueText"></span>
+      </div>
       <div>
 		<table class="bk-table w-full text-sm border-collapse mb-3" style="table-layout:fixed">
 		<colgroup>
@@ -842,10 +848,33 @@
 <div id="modalConfirm" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
   <div class="bg-white p-6 rounded w-full max-w-md">
     <h2 class="text-xl font-bold mb-4">Bestätigung erforderlich</h2>
+    <div id="confirmOverdueBanner" class="overdue-banner hidden flex items-start gap-2 rounded p-3 mb-4 font-semibold">
+      <span class="text-2xl leading-none">⚠️</span>
+      <span id="confirmOverdueText"></span>
+    </div>
     <p id="confirmMsg" class="mb-6 text-gray-700"></p>
     <div class="flex justify-end gap-2">
       <button id="btnConfirmCancel" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Abbrechen</button>
       <button id="btnConfirmOk"     class="bg-red-600  text-white px-4 py-2 rounded hover:bg-red-700">Bestätigen</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalOverdue" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+  <div class="bg-white p-6 rounded w-full max-w-md overdue-frame">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-3xl">⚠️</span>
+      <h2 class="text-xl font-bold" style="color:#b91c1c">Offener Betrag</h2>
+    </div>
+    <p id="overdueIntro" class="text-gray-700 mb-3"></p>
+    <div class="overdue-banner rounded p-3 mb-4 text-center">
+      <div id="overdueSinceLine" class="text-sm"></div>
+      <div id="overdueAmount" class="text-3xl font-bold"></div>
+    </div>
+    <p class="text-sm text-gray-600 mb-5">Bitte begleiche deinen Saldo möglichst bald!</p>
+    <div class="flex justify-between items-center gap-2" style="min-height:3rem">
+      <button id="btnOverdueCancel" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded">Abbrechen</button>
+      <button id="btnOverdueContinue" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed">Trotzdem buchen</button>
     </div>
   </div>
 </div>
@@ -1045,9 +1074,15 @@ function showToast(msg, type='success') {
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3200);
 }
 
-function showConfirm(msg, cb) {
+function showConfirm(msg, cb, overdueInfo = null) {
   document.getElementById('confirmMsg').textContent = msg;
   confirmCb = cb;
+  applyOverdueMarking(
+    document.querySelector('#modalConfirm > div'),
+    document.getElementById('confirmOverdueBanner'),
+    document.getElementById('confirmOverdueText'),
+    overdueInfo
+  );
   document.getElementById('modalConfirm').classList.remove('hidden');
 }
 function confirmDiscard(cb) {
@@ -1475,12 +1510,187 @@ async function reactivateMember(id) {
 }
 window.reactivateMember = reactivateMember;
 
+// ── Zahlungserinnerung ──
+const OVERDUE_DAYS        = 28;     // ab so vielen Tagen offen gilt ein Mitglied als überfällig
+const OVERDUE_FLEE_MS     = 10000;  // Desktop: so lange weicht der Button der Maus aus
+const OVERDUE_LOCK_MOBILE = 5;      // Handy: so viele Sekunden nicht klickbar
+const OVERDUE_RADIUS      = 160;    // Abstand (px), ab dem der Button abgestoßen wird
+
+let overdueTimer   = null;
+let overdueProceed = null;
+let overdueLocked  = false;
+let overdueFlee    = null; // { btn, home, tx, ty }
+
+function getOverdueInfo(memberId) {
+  const m = members.find(x => x.id === memberId);
+  if (!m || (m.balance || 0) <= 0.005) return null;
+  const open = Object.values(buchungenCache)
+    .filter(b => b.memberId === memberId && !b.settled && b.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // NEU: Saldo offen, aber keine offene Buchung → Vortrag aus dem Vorsystem
+  if (!open.length) {
+    return { balance: m.balance, oldestDate: null, days: null, weeks: null, carryover: true };
+  }
+
+  const oldest = open[0].date;
+  const days = Math.floor((new Date(today()) - new Date(oldest)) / 86400000);
+  if (days < OVERDUE_DAYS) return null;
+  return { balance: m.balance, oldestDate: oldest, days, weeks: Math.floor(days / 7), carryover: false };
+}
+
+function overdueMessage(info) {
+  if (info.carryover) {
+    return `Offener Betrag: ${fEuro(info.balance)} (Vortrag, noch nie bezahlt). Bitte bezahle bald!`;
+  }
+  const w = info.weeks === 1 ? '1 Woche' : `${info.weeks} Wochen`;
+  return `Offener Betrag: ${fEuro(info.balance)} (seit ${w}). Bitte bezahle bald!`;
+}
+
+// Roter Rahmen + rote Meldung an einem Modal ein-/ausschalten (info = null → aus)
+function applyOverdueMarking(panel, banner, textEl, info) {
+  if (!panel || !banner || !textEl) return;
+  panel.classList.toggle('overdue-frame', !!info);
+  banner.classList.toggle('hidden', !info);
+  if (info) textEl.textContent = overdueMessage(info);
+}
+
+function overdueReset() {
+  clearInterval(overdueTimer);
+  document.removeEventListener('mousemove', overdueFleeMove);
+  overdueFlee   = null;
+  overdueLocked = false;
+  const btn = document.getElementById('btnOverdueContinue');
+  btn.disabled = false;
+  btn.textContent = 'Trotzdem buchen';
+  btn.style.transition = 'none';
+  btn.style.transform  = 'none';
+}
+
+function overdueUnlock() {
+  const btn = document.getElementById('btnOverdueContinue');
+  clearInterval(overdueTimer);
+  document.removeEventListener('mousemove', overdueFleeMove);
+  overdueFlee   = null;
+  overdueLocked = false;
+  btn.disabled = false;
+  btn.textContent = 'Trotzdem buchen';
+  btn.style.transition = 'transform .35s ease';
+  btn.style.transform  = 'translate(0px, 0px)'; // zurück an die Ausgangsposition
+}
+
+function overdueFleeStart(btn) {
+  btn.style.transition = 'none';
+  btn.style.transform  = 'none';
+  const home = btn.getBoundingClientRect();
+  btn.style.transition = 'transform .12s ease-out';
+  overdueFlee = { btn, home, tx: 0, ty: 0 };
+  document.addEventListener('mousemove', overdueFleeMove);
+}
+
+function overdueFleeMove(e) {
+  const f = overdueFlee; if (!f) return;
+  const pad = 8, W = window.innerWidth, H = window.innerHeight;
+  const minTx = pad - f.home.left, maxTx = W - pad - f.home.right;
+  const minTy = pad - f.home.top,  maxTy = H - pad - f.home.bottom;
+
+  // Abstand Mauszeiger → Button-Rechteck (bei Position tx/ty)
+  const distTo = (x, y, tx, ty) => {
+    const nx = Math.max(f.home.left + tx, Math.min(x, f.home.right + tx));
+    const ny = Math.max(f.home.top  + ty, Math.min(y, f.home.bottom + ty));
+    return Math.hypot(x - nx, y - ny);
+  };
+
+  const d = distTo(e.clientX, e.clientY, f.tx, f.ty);
+  if (d >= OVERDUE_RADIUS) return;
+
+  // Richtung: vom Mauszeiger weg
+  const cx = f.home.left + f.tx + f.home.width / 2;
+  const cy = f.home.top  + f.ty + f.home.height / 2;
+  let vx = cx - e.clientX, vy = cy - e.clientY;
+  let len = Math.hypot(vx, vy);
+  if (len < 1) { const a = Math.random() * Math.PI * 2; vx = Math.cos(a); vy = Math.sin(a); len = 1; }
+
+  const push = (OVERDUE_RADIUS - d) * 0.6 + 10;
+  let ntx = Math.max(minTx, Math.min(maxTx, f.tx + (vx / len) * push));
+  let nty = Math.max(minTy, Math.min(maxTy, f.ty + (vy / len) * push));
+
+  // In eine Ecke gedrängt? → an eine zufällige freie Stelle springen
+  if (distTo(e.clientX, e.clientY, ntx, nty) < OVERDUE_RADIUS * 0.5) {
+    for (let i = 0; i < 30; i++) {
+      const rtx = minTx + Math.random() * (maxTx - minTx);
+      const rty = minTy + Math.random() * (maxTy - minTy);
+      if (distTo(e.clientX, e.clientY, rtx, rty) > OVERDUE_RADIUS * 1.5) { ntx = rtx; nty = rty; break; }
+    }
+  }
+  f.tx = ntx; f.ty = nty;
+  f.btn.style.transform = `translate(${ntx}px, ${nty}px)`;
+}
+
+function checkOverdueThen(memberId, proceed) {
+  const info = getOverdueInfo(memberId);
+  if (!info) { proceed(); return; }
+  overdueReset();
+  const m = members.find(x => x.id === memberId);
+  overdueProceed = proceed;
+  document.getElementById('overdueIntro').innerHTML = info.carryover
+    ? `<span id="overdueName" class="font-semibold"></span>, du hast noch <span class="font-semibold">nie etwas bezahlt</span> (Vortrag aus dem Vorsystem).`
+    : `<span id="overdueName" class="font-semibold"></span>, du hast seit <span class="font-semibold">${info.weeks === 1 ? '1 Woche' : info.weeks + ' Wochen'}</span> nichts mehr bezahlt.`;
+  document.getElementById('overdueName').textContent   = memberDisplayName(m);
+  document.getElementById('overdueSinceLine').textContent = info.carryover
+    ? 'Vortrag aus dem Vorsystem'
+    : `Offen seit ${fDate(info.oldestDate)}`;
+  document.getElementById('overdueAmount').textContent = fEuro(info.balance);
+  document.getElementById('modalOverdue').classList.remove('hidden');
+
+  const btn = document.getElementById('btnOverdueContinue');
+  const isDesktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  overdueLocked = true;
+
+  if (isDesktop) {
+    // Desktop: Button weicht der Maus 10 Sekunden lang aus
+    overdueFleeStart(btn);
+    let left = OVERDUE_FLEE_MS / 1000;
+    btn.textContent = `Trotzdem buchen (${left})`;
+    overdueTimer = setInterval(() => {
+      left--;
+      if (left > 0) btn.textContent = `Trotzdem buchen (${left})`;
+      else overdueUnlock();
+    }, 1000);
+  } else {
+    // Handy/Touch: Button 5 Sekunden nicht klickbar
+    btn.disabled = true;
+    let left = OVERDUE_LOCK_MOBILE;
+    btn.textContent = `Trotzdem buchen (${left})`;
+    overdueTimer = setInterval(() => {
+      left--;
+      if (left > 0) btn.textContent = `Trotzdem buchen (${left})`;
+      else overdueUnlock();
+    }, 1000);
+  }
+}
+
+document.getElementById('btnOverdueContinue').addEventListener('click', () => {
+  if (overdueLocked) return; // Schutz, z. B. gegen Tab + Enter
+  document.getElementById('modalOverdue').classList.add('hidden');
+  const cb = overdueProceed;
+  overdueProceed = null;
+  overdueReset();
+  if (cb) cb();
+});
+document.getElementById('btnOverdueCancel').addEventListener('click', () => {
+  document.getElementById('modalOverdue').classList.add('hidden');
+  overdueProceed = null;
+  overdueReset();
+});
+
 // ── Schnellbuchung Lieblingsgetränk ──
 async function quickFav(memberId) {
   const m = members.find(x => x.id === memberId); if (!m || !m.preference_drink) return;
   const art = ARTICLES.find(a => a.name === m.preference_drink);
   if (!art) { showToast('Artikel nicht gefunden.', 'error'); return; }
-  showConfirm(`1× „${art.name}" (${fEuro(art.memberPrice)}) für ${memberDisplayName(m)} buchen?`, async () => {
+  const od = getOverdueInfo(memberId);
+  checkOverdueThen(memberId, () => showConfirm(`1× „${art.name}" (${fEuro(art.memberPrice)}) für ${memberDisplayName(m)} buchen?`, async () => {
     try {
       await addBookingAtomically(memberId, {
         memberId, date: today(),
@@ -1489,15 +1699,24 @@ async function quickFav(memberId) {
       });
       showToast(`+1 ${art.name} für ${memberDisplayName(m)} gebucht.`);
     } catch(e) { console.error(e); showToast('Fehler beim Buchen.', 'error'); }
-  });
+  }, od));
 }
 window.quickFav = quickFav;
 
 // ── Buchung erfassen ──
 function openBookingModal(memberId) {
+  checkOverdueThen(memberId, () => openBookingModalNow(memberId));
+}
+function openBookingModalNow(memberId) {
   const m = members.find(x => x.id === memberId); if (!m) return;
   bookingMemberId = memberId; bookingQty = {};
   document.getElementById('bookingLabel').textContent = `Buchung für: ${memberDisplayName(m)}`;
+  applyOverdueMarking(
+    document.querySelector('#modalBooking > div'),
+    document.getElementById('bkOverdueBanner'),
+    document.getElementById('bkOverdueText'),
+    getOverdueInfo(memberId)
+  );
   const di = document.getElementById('bkDate'); di.value = today(); di.min = today();
   buildBkGrids(); updateBkSums();
   document.getElementById('modalBooking').classList.remove('hidden');
@@ -3932,7 +4151,7 @@ document.getElementById('btnDoAbrechnung').addEventListener('click', async () =>
 // ESC + MODAL-HINTERGRUND SCHLIEßEN
 // ══════════════════════════════════════════════════════════════
 const MODALS = ['modalMember','modalEditBooking','modalHistory','modalSettle',
-  'modalGuestSettle','modalWeekDetails','modalCreateAbrechnung','modalConfirm','modalReportsAccess','modalEinzel','modalEinzelHistory'];
+  'modalGuestSettle','modalWeekDetails','modalCreateAbrechnung','modalConfirm','modalReportsAccess','modalEinzel','modalEinzelHistory','modalOverdue'];
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
